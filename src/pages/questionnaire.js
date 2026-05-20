@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
+import Link from "next/link";
 import FlowHeader from "../components/FlowHeader";
 import FlowStepper from "../components/FlowStepper";
 
@@ -631,7 +632,7 @@ export default function Questionnaire() {
                 {!dealId && (
                   <p className="text-xs text-gray-400 text-center mt-5">
                     No deal ID found. Please start from the{" "}
-                    <a href="/intake" className="text-blue-500 underline">intake form</a>.
+                    <Link href="/intake" className="text-blue-500 underline">intake form</Link>.
                   </p>
                 )}
               </div>
@@ -741,7 +742,7 @@ export default function Questionnaire() {
                 {!dealId && (
                   <p className="text-xs text-gray-400 text-center mt-5">
                     No deal ID found. Please start from the{" "}
-                    <a href="/intake" className="text-blue-500 underline">intake form</a>.
+                    <Link href="/intake" className="text-blue-500 underline">intake form</Link>.
                   </p>
                 )}
               </div>
