@@ -8,7 +8,7 @@ export default function ComingSoon() {
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (password === "mergeraid2026") {
+    if (password === "isco") {
       const maxAge = 30 * 24 * 60 * 60;
       document.cookie = `site_access=granted; path=/; max-age=${maxAge}; SameSite=Lax`;
       router.push("/");
