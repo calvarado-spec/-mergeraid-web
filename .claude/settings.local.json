@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(Test-Path \"c:\\\\Users\\\\17863\\\\Desktop\\\\mergeraid-web\\\\src\\\\pages\\\\about.js\")",
+      "Bash(node -e \"require\\('puppeteer'\\); console.log\\('puppeteer ok'\\)\")",
+      "Bash(node -e \"require\\('puppeteer-core'\\); require\\('@sparticuz/chromium'\\); console.log\\('puppeteer-core + chromium ok'\\)\")",
+      "Bash(npm uninstall *)",
+      "Bash(not exist *)",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\17863\\\\Desktop\\\\mergeraid-web\\\\src\\\\pages\\\\report\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); const deps={...p.dependencies,...p.devDependencies}; const pup=Object.keys\\(deps\\).filter\\(k=>k.includes\\('puppeteer'\\)||k.includes\\('chromium'\\)\\); console.log\\(pup.length===0?'clean':pup.join\\(', '\\)\\)\")",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
