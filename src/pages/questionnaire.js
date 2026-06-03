@@ -568,7 +568,7 @@ export default function Questionnaire() {
     <div className="min-h-screen bg-white flex flex-col">
       <FlowHeader />
       <FlowStepper activeStep={1} />
-      <div className="flex flex-col items-center px-4 py-12 flex-1">
+      <div className="flex flex-col items-center px-4 py-6 sm:py-12 flex-1">
       <div className="w-full max-w-2xl">
 
         {/* Progress bar */}
@@ -608,7 +608,7 @@ export default function Questionnaire() {
           <>
             {/* ── Asset: Yes/No question ── */}
             {view === "question" && currentAssetQ && (
-              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-8">
+              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
                 <p className="text-gray-800 text-base font-medium leading-relaxed mb-8">
                   {currentAssetQ.text}
                   <TooltipIcon text={TOOLTIPS[questionId]} />
@@ -640,7 +640,7 @@ export default function Questionnaire() {
 
             {/* ── Asset: State multi-select ── */}
             {view === "state-select" && (
-              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-8">
+              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
                 <p className="text-gray-800 text-base font-medium mb-1">Select all applicable states:</p>
                 <p className="text-xs text-blue-400 mb-5">
                   {selectedStates.length} state{selectedStates.length !== 1 ? "s" : ""} selected
@@ -672,14 +672,14 @@ export default function Questionnaire() {
 
             {/* ── Asset: State sales inputs ── */}
             {view === "state-sales" && (
-              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-8">
+              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
                 <p className="text-gray-800 text-base font-medium mb-1">Enter annual sales amounts ($) by state:</p>
                 <p className="text-xs text-blue-400 mb-6">Year 1 is most recent</p>
                 <div className="space-y-6 mb-6 max-h-96 overflow-y-auto pr-1">
                   {selectedStates.map((state) => (
                     <div key={state}>
                       <p className="text-sm font-semibold text-blue-700 mb-2">{state}</p>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {["year1", "year2", "year3"].map((yr, i) => (
                           <div key={yr}>
                             <label className="text-xs text-gray-400 mb-1 block">Year {i + 1}</label>
@@ -717,7 +717,7 @@ export default function Questionnaire() {
           <>
             {/* ── Equity: Entity type selection ── */}
             {equityView === "entity-select" && (
-              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-8">
+              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
                 <p className="text-gray-800 text-base font-medium leading-relaxed mb-8">
                   What is the target&apos;s entity type?
                   <TooltipIcon text={TOOLTIPS["entity_type"]} />
@@ -750,7 +750,7 @@ export default function Questionnaire() {
 
             {/* ── Equity: Yes/No question ── */}
             {equityView === "question" && currentEquityQ && (
-              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-8">
+              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
                 <p className="text-gray-800 text-base font-medium leading-relaxed mb-8">
                   {currentEquityQ.text}
                   <TooltipIcon text={TOOLTIPS[equityQuestionId]} />
@@ -765,7 +765,7 @@ export default function Questionnaire() {
 
             {/* ── Equity: Text input (NOL amount) ── */}
             {equityView === "text-input" && currentEquityQ && (
-              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-8">
+              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
                 <p className="text-gray-800 text-base font-medium leading-relaxed mb-6">
                   {currentEquityQ.text}
                   <TooltipIcon text={TOOLTIPS[equityQuestionId]} />
@@ -795,7 +795,7 @@ export default function Questionnaire() {
             DONE — shared by both flows
         ════════════════════════════════════════════════════ */}
         {isDone && (
-          <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-10 text-center">
+          <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-6 sm:p-10 text-center">
             <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-5">
               <svg className="w-7 h-7 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />

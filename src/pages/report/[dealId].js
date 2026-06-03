@@ -249,6 +249,28 @@ const STYLES = `
   }
 
   /* ── Print ──────────────────────────────────────────────── */
+  @media screen and (max-width: 640px) {
+    body { background: #f0f4f8; }
+
+    .report-wrapper { padding: 64px 0 24px; }
+
+    .report-section {
+      width: 100%;
+      padding: 20px 16px;
+      margin-bottom: 16px;
+    }
+
+    .cover-section { min-height: auto; }
+    .cover-confidential { margin-bottom: 24px; }
+    .cover-title { font-size: 18pt; }
+    .cover-subtitle { font-size: 10pt; }
+    .cover-footer { flex-direction: column; gap: 12px; }
+    .cover-footer-note { text-align: left; max-width: 100%; }
+
+    .data-table { font-size: 8.5pt; }
+    .th, .td, .td-clean { padding: 6px 8px; }
+  }
+
   @media print {
     .no-print { display: none !important; }
 
@@ -356,7 +378,7 @@ export default function ReportPage() {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "0 28px",
+          padding: "0 16px",
           zIndex: 100,
           boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
         }}

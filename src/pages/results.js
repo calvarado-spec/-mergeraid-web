@@ -82,7 +82,7 @@ export default function Results() {
 
           {/* Report header */}
           <div className="mb-10 print:mb-6">
-            <div className="flex items-start justify-between gap-4 mb-5">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5">
               <h2 className="text-xl font-semibold text-gray-800">
                 Tax Due Diligence Risk Summary
               </h2>
