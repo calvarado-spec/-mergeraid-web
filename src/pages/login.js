@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import Image from "next/image";
+import Footer from "../components/Footer";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -79,7 +80,8 @@ export default function LoginPage() {
     "w-full border border-blue-200 rounded-lg px-4 py-2.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400";
 
   return (
-    <div className="min-h-screen bg-blue-50 flex flex-col items-center justify-center px-4">
+    <div className="min-h-screen bg-blue-50 flex flex-col">
+      <div className="flex-1 flex flex-col items-center justify-center px-4">
       {/* Logo */}
       <Link href="/" className="flex items-center gap-2 mb-8">
         <Image src="/images/mergeraid-logo.png" alt="MergerAid Logo" width={32} height={32} />
@@ -196,9 +198,8 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <p className="mt-6 text-xs text-gray-400">
-        &copy; {new Date().getFullYear()} MergerAid
-      </p>
+      </div>
+      <Footer />
     </div>
   );
 }

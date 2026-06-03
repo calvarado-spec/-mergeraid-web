@@ -24,12 +24,12 @@ export default function Footer() {
           <h4 className="font-semibold mb-2">Legal</h4>
           <ul className="space-y-1">
             <li><Link href="/privacy" className="hover:text-blue-600">Privacy Policy</Link></li>
-            <li><Link href="/terms" className="hover:text-blue-600">Terms of Use</Link></li>
+            <li><Link href="/terms" className="hover:text-blue-600">Terms of Service</Link></li>
           </ul>
         </div>
       </div>
       <p className="text-center text-xs text-gray-400 mt-6">
-        &copy; {new Date().getFullYear()} MergerAid. All rights reserved.
+        &copy; 2025 MergerAid. All rights reserved.
       </p>
     </footer>
   );
