@@ -176,21 +176,21 @@ const QUESTIONS = {
   // ── Financial input questions (asset flow) ────────────────────────────────
   gross_receipts_y1: {
     number: 0, type: "numeric-input",
-    text: "Gross Receipts – Most Recent Year",
+    text: "Gross Receipts – Year 1 of Review Period",
     placeholder: "e.g. 5000000",
     next: "gross_receipts_y2", nextNumber: 0,
   },
   gross_receipts_y2: {
     number: 0, type: "numeric-input",
-    text: "Gross Receipts – Prior Year",
+    text: "Gross Receipts – Year 2 of Review Period",
     placeholder: "e.g. 5000000",
     next: "gross_receipts_y3", nextNumber: 0,
   },
   gross_receipts_y3: {
     number: 0, type: "numeric-input",
-    text: "Gross Receipts – Two Years Prior",
+    text: "Gross Receipts – Year 3 of Review Period",
     placeholder: "e.g. 5000000",
-    next: "prior_reorg", nextNumber: 1,
+    next: "erc_claimed", nextNumber: 3,
   },
   erc_amount: {
     number: 3, type: "numeric-input",
@@ -287,21 +287,21 @@ const EQUITY_QUESTIONS = {
   },
   eq_utp: {
     text: "Does the company have any uncertain tax positions reflected on the balance sheet?",
-    next: "done",
+    next: "gross_receipts_y1",
   },
   // ── Financial input questions (equity flow) ───────────────────────────────
   gross_receipts_y1: {
-    text: "Gross Receipts – Most Recent Year",
+    text: "Gross Receipts – Year 1 of Review Period",
     type: "numeric-input", placeholder: "e.g. 5000000",
     next: "gross_receipts_y2",
   },
   gross_receipts_y2: {
-    text: "Gross Receipts – Prior Year",
+    text: "Gross Receipts – Year 2 of Review Period",
     type: "numeric-input", placeholder: "e.g. 5000000",
     next: "gross_receipts_y3",
   },
   gross_receipts_y3: {
-    text: "Gross Receipts – Two Years Prior",
+    text: "Gross Receipts – Year 3 of Review Period",
     type: "numeric-input", placeholder: "e.g. 5000000",
   },
   officer_comp: {
@@ -388,13 +388,7 @@ export default function Questionnaire() {
       .then((r) => r.json())
       .then((d) => {
         if (d.error) setLoadError(d.error);
-        else {
-          setDealType(d.deal_type);
-          if (d.deal_type === "asset") {
-            setQuestionId("gross_receipts_y1");
-            setQuestionNumber(0);
-          }
-        }
+        else setDealType(d.deal_type);
       })
       .catch(() => setLoadError("Failed to load deal."))
       .finally(() => setLoadingDeal(false));
@@ -432,8 +426,10 @@ export default function Questionnaire() {
   const progressNum = (isAsset || equityInAssetPhase) ? questionNumber : equityQuestionNum;
   const progressTotal = isAsset ? 14 : equityTotal;
   const progress = progressTotal ? Math.max(0, Math.round(((progressNum - 1) / progressTotal) * 100)) : 0;
-  const showProgressBar = !isDone && !loadingDeal && dealType &&
-    ((isAsset || equityInAssetPhase) ? questionNumber > 0 : true);
+  const GROSS_RECEIPTS_IDS = new Set(["gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3"]);
+  const showProgressBar = !isDone && !loadingDeal && dealType && (
+    (isAsset || equityInAssetPhase) ? !GROSS_RECEIPTS_IDS.has(questionId) : true
+  );
   const progressLabel = progressTotal
     ? `Question ${progressNum} of ${progressTotal}`
     : `Question ${progressNum}`;
@@ -467,8 +463,16 @@ export default function Questionnaire() {
       } else if (outcome.next === "done") {
         setView("done");
       } else {
-        setQuestionId(outcome.next);
-        setQuestionNumber(equityOffset + outcome.nextNumber);
+        let nextId = outcome.next;
+        let nextNum = outcome.nextNumber;
+        // For pure asset deals, insert gross_receipts block after prior_reorg/prior_diligence
+        if (!equityInAssetPhase && nextId === "erc_claimed" &&
+            (questionId === "prior_diligence" || questionId === "prior_reorg")) {
+          nextId = "gross_receipts_y1";
+          nextNum = questionNumber;
+        }
+        setQuestionId(nextId);
+        setQuestionNumber(equityOffset + nextNum);
         setView("question");
       }
     } catch (err) {
@@ -557,9 +561,9 @@ export default function Questionnaire() {
       await postAnswer("entity_type", entityType);
       setEquityTotal(EQUITY_BASE_TOTALS[entityType]);
       setEquityEntityType(entityType);
-      setEquityQuestionId("gross_receipts_y1");
+      setEquityQuestionId(EQUITY_FIRST_QUESTION[entityType]);
       setEquityQuestionNum(2);
-      setEquityView("numeric-input");
+      setEquityView("question");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -613,20 +617,28 @@ export default function Questionnaire() {
     try {
       await postAnswer(equityQuestionId, numericInputValue.trim() || "0");
       setNumericInputValue("");
-      let nextId;
-      if (equityQuestionId === "gross_receipts_y3") {
-        nextId = equityEntityType === "scorp" ? "officer_comp" : EQUITY_FIRST_QUESTION[equityEntityType];
-      } else if (equityQuestionId === "officer_comp") {
-        nextId = EQUITY_FIRST_QUESTION["scorp"];
+      const isLastFinancial =
+        equityQuestionId === "officer_comp" ||
+        (equityQuestionId === "gross_receipts_y3" && equityEntityType !== "scorp");
+      if (isLastFinancial) {
+        // Transition to asset phase
+        setEquityOffset(equityQuestionNum);
+        setEquityInAssetPhase(true);
+        setView("question");
+        setQuestionId("prior_reorg");
+        setQuestionNumber(equityQuestionNum + 1);
+      } else if (equityQuestionId === "gross_receipts_y3" && equityEntityType === "scorp") {
+        setEquityQuestionId("officer_comp");
+        setEquityQuestionNum((prev) => prev + 1);
+        setEquityView("numeric-input");
       } else {
-        nextId = EQUITY_QUESTIONS[equityQuestionId]?.next;
+        const nextId = EQUITY_QUESTIONS[equityQuestionId]?.next;
+        const nextQ = EQUITY_QUESTIONS[nextId];
+        setEquityQuestionId(nextId);
+        setEquityQuestionNum((prev) => prev + 1);
+        if (nextQ?.type === "numeric-input") setEquityView("numeric-input");
+        else setEquityView("question");
       }
-      const nextQ = EQUITY_QUESTIONS[nextId];
-      setEquityQuestionId(nextId);
-      setEquityQuestionNum((prev) => prev + 1);
-      if (nextQ?.type === "numeric-input") setEquityView("numeric-input");
-      else if (nextQ?.type === "text-input") setEquityView("text-input");
-      else setEquityView("question");
     } catch (err) {
       setError(err.message);
     } finally {
