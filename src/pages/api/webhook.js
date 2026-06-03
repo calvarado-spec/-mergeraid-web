@@ -1,3 +1,4 @@
+// Stripe webhook handler
 import Stripe from "stripe";
 import { Pool } from "pg";
 
