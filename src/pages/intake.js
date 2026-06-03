@@ -19,7 +19,17 @@ export default function Intake() {
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => {
-        if (r.status === 401) router.push("/login?redirect=/intake");
+        if (r.status === 401) {
+          router.push("/login?redirect=/intake");
+          return null;
+        }
+        return r.json();
+      })
+      .then((data) => {
+        if (!data) return;
+        if (data.user?.subscription_status !== "active") {
+          router.push("/pricing");
+        }
       })
       .catch(() => router.push("/login?redirect=/intake"))
       .finally(() => setAuthChecked(true));

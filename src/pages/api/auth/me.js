@@ -11,7 +11,7 @@ export default async function handler(req, res) {
 
   try {
     const result = await pool.query(
-      "SELECT id, email, created_at FROM users WHERE id = $1::uuid",
+      "SELECT id, email, created_at, subscription_status, plan_type FROM users WHERE id = $1::uuid",
       [userId]
     );
     if (result.rows.length === 0) {
