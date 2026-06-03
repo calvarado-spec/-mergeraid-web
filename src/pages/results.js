@@ -151,6 +151,13 @@ export default function Results() {
             </div>
           )}
 
+          {/* Exposure callout */}
+          {risks.length > 0 && (
+            <p className="text-sm text-blue-600 mt-6 mb-2">
+              See the full PDF report for estimated dollar exposure ranges.
+            </p>
+          )}
+
           {/* Clean categories */}
           {cleanCategories.length > 0 && (
             <div>

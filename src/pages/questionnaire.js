@@ -55,8 +55,8 @@ const QUESTIONS = {
     number: 3,
     text: "Has the credit for any quarter been received within the past 2 years?",
     outcomes: {
-      yes: { risk: true, next: "tax_exam", nextNumber: 4 },
-      no:  { risk: true, next: "tax_exam", nextNumber: 4 },
+      yes: { risk: true, next: "erc_amount", nextNumber: 3 },
+      no:  { risk: true, next: "erc_amount", nextNumber: 3 },
     },
   },
   tax_exam: {
@@ -152,7 +152,7 @@ const QUESTIONS = {
     text: "Does the Company have a process in place to differentiate whether an independent contractor should be considered an employee?",
     threeWay: true,
     outcomes: {
-      yes: { next: "property_tax", nextNumber: 13 },
+      yes: { next: "contractor_count", nextNumber: 12 },
       no:  { risk: true, next: "property_tax", nextNumber: 13 },
       na:  { next: "property_tax", nextNumber: 13 },
     },
@@ -172,6 +172,37 @@ const QUESTIONS = {
       yes: { next: "done" },
       no:  { risk: true, next: "done" },
     },
+  },
+  // ── Financial input questions (asset flow) ────────────────────────────────
+  gross_receipts_y1: {
+    number: 0, type: "numeric-input",
+    text: "Gross Receipts – Most Recent Year",
+    placeholder: "e.g. 5000000",
+    next: "gross_receipts_y2", nextNumber: 0,
+  },
+  gross_receipts_y2: {
+    number: 0, type: "numeric-input",
+    text: "Gross Receipts – Prior Year",
+    placeholder: "e.g. 5000000",
+    next: "gross_receipts_y3", nextNumber: 0,
+  },
+  gross_receipts_y3: {
+    number: 0, type: "numeric-input",
+    text: "Gross Receipts – Two Years Prior",
+    placeholder: "e.g. 5000000",
+    next: "prior_reorg", nextNumber: 1,
+  },
+  erc_amount: {
+    number: 3, type: "numeric-input",
+    text: "Total ERC Credits Claimed Across All Years",
+    placeholder: "e.g. 250000",
+    next: "tax_exam", nextNumber: 4,
+  },
+  contractor_count: {
+    number: 12, type: "numeric-input",
+    text: "Approximate Number of Regular 1099 Contractors",
+    placeholder: "e.g. 5",
+    next: "property_tax", nextNumber: 13,
   },
 };
 
@@ -258,6 +289,25 @@ const EQUITY_QUESTIONS = {
     text: "Does the company have any uncertain tax positions reflected on the balance sheet?",
     next: "done",
   },
+  // ── Financial input questions (equity flow) ───────────────────────────────
+  gross_receipts_y1: {
+    text: "Gross Receipts – Most Recent Year",
+    type: "numeric-input", placeholder: "e.g. 5000000",
+    next: "gross_receipts_y2",
+  },
+  gross_receipts_y2: {
+    text: "Gross Receipts – Prior Year",
+    type: "numeric-input", placeholder: "e.g. 5000000",
+    next: "gross_receipts_y3",
+  },
+  gross_receipts_y3: {
+    text: "Gross Receipts – Two Years Prior",
+    type: "numeric-input", placeholder: "e.g. 5000000",
+  },
+  officer_comp: {
+    text: "Total Officer/Shareholder W-2 Compensation (most recent year)",
+    type: "numeric-input", placeholder: "e.g. 120000",
+  },
 };
 
 // Total questions per equity entity type (including entity_type question + common 3)
@@ -338,7 +388,13 @@ export default function Questionnaire() {
       .then((r) => r.json())
       .then((d) => {
         if (d.error) setLoadError(d.error);
-        else setDealType(d.deal_type);
+        else {
+          setDealType(d.deal_type);
+          if (d.deal_type === "asset") {
+            setQuestionId("gross_receipts_y1");
+            setQuestionNumber(0);
+          }
+        }
       })
       .catch(() => setLoadError("Failed to load deal."))
       .finally(() => setLoadingDeal(false));
@@ -362,6 +418,8 @@ export default function Questionnaire() {
   const [equityInAssetPhase, setEquityInAssetPhase] = useState(false);
   const [equityOffset, setEquityOffset] = useState(0);
   const [textInputValue, setTextInputValue] = useState("");
+  const [numericInputValue, setNumericInputValue] = useState("");
+  const [equityEntityType, setEquityEntityType] = useState(null);
 
   // ── Shared ───────────────────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false);
@@ -373,7 +431,9 @@ export default function Questionnaire() {
   const isDone = view === "done";
   const progressNum = (isAsset || equityInAssetPhase) ? questionNumber : equityQuestionNum;
   const progressTotal = isAsset ? 14 : equityTotal;
-  const progress = progressTotal ? Math.round(((progressNum - 1) / progressTotal) * 100) : 0;
+  const progress = progressTotal ? Math.max(0, Math.round(((progressNum - 1) / progressTotal) * 100)) : 0;
+  const showProgressBar = !isDone && !loadingDeal && dealType &&
+    ((isAsset || equityInAssetPhase) ? questionNumber > 0 : true);
   const progressLabel = progressTotal
     ? `Question ${progressNum} of ${progressTotal}`
     : `Question ${progressNum}`;
@@ -410,6 +470,27 @@ export default function Questionnaire() {
         setQuestionId(outcome.next);
         setQuestionNumber(equityOffset + outcome.nextNumber);
         setView("question");
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleAssetNumericSubmit() {
+    if (!dealId) return;
+    setError("");
+    setSubmitting(true);
+    try {
+      await postAnswer(questionId, numericInputValue.trim() || "0");
+      const q = QUESTIONS[questionId];
+      setNumericInputValue("");
+      if (q.next === "done") {
+        setView("done");
+      } else {
+        setQuestionId(q.next);
+        setQuestionNumber(equityOffset + q.nextNumber);
       }
     } catch (err) {
       setError(err.message);
@@ -475,9 +556,10 @@ export default function Questionnaire() {
     try {
       await postAnswer("entity_type", entityType);
       setEquityTotal(EQUITY_BASE_TOTALS[entityType]);
-      setEquityQuestionId(EQUITY_FIRST_QUESTION[entityType]);
+      setEquityEntityType(entityType);
+      setEquityQuestionId("gross_receipts_y1");
       setEquityQuestionNum(2);
-      setEquityView("question");
+      setEquityView("numeric-input");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -513,8 +595,38 @@ export default function Questionnaire() {
         const nextQ = EQUITY_QUESTIONS[nextId];
         setEquityQuestionId(nextId);
         setEquityQuestionNum((prev) => prev + 1);
-        setEquityView(nextQ?.type === "text-input" ? "text-input" : "question");
+        if (nextQ?.type === "numeric-input") setEquityView("numeric-input");
+        else if (nextQ?.type === "text-input") setEquityView("text-input");
+        else setEquityView("question");
       }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleEquityNumericSubmit() {
+    if (!dealId) return;
+    setError("");
+    setSubmitting(true);
+    try {
+      await postAnswer(equityQuestionId, numericInputValue.trim() || "0");
+      setNumericInputValue("");
+      let nextId;
+      if (equityQuestionId === "gross_receipts_y3") {
+        nextId = equityEntityType === "scorp" ? "officer_comp" : EQUITY_FIRST_QUESTION[equityEntityType];
+      } else if (equityQuestionId === "officer_comp") {
+        nextId = EQUITY_FIRST_QUESTION["scorp"];
+      } else {
+        nextId = EQUITY_QUESTIONS[equityQuestionId]?.next;
+      }
+      const nextQ = EQUITY_QUESTIONS[nextId];
+      setEquityQuestionId(nextId);
+      setEquityQuestionNum((prev) => prev + 1);
+      if (nextQ?.type === "numeric-input") setEquityView("numeric-input");
+      else if (nextQ?.type === "text-input") setEquityView("text-input");
+      else setEquityView("question");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -572,7 +684,7 @@ export default function Questionnaire() {
       <div className="w-full max-w-2xl">
 
         {/* Progress bar */}
-        {!isDone && !loadingDeal && dealType && (
+        {showProgressBar && (
           <div className="mb-6">
             <div className="flex justify-between text-xs text-blue-400 mb-1">
               <span>{progressLabel}</span>
@@ -606,34 +718,57 @@ export default function Questionnaire() {
         ════════════════════════════════════════════════════ */}
         {(isAsset || equityInAssetPhase) && !isDone && (
           <>
-            {/* ── Asset: Yes/No question ── */}
+            {/* ── Asset: question (yes/no or numeric input) ── */}
             {view === "question" && currentAssetQ && (
               <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
-                <p className="text-gray-800 text-base font-medium leading-relaxed mb-8">
+                <p className="text-gray-800 text-base font-medium leading-relaxed mb-6">
                   {currentAssetQ.text}
-                  <TooltipIcon text={TOOLTIPS[questionId]} />
+                  {!currentAssetQ.type && <TooltipIcon text={TOOLTIPS[questionId]} />}
                 </p>
                 {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2 mb-4">{error}</p>}
-                <div className="flex flex-col gap-3">
-                  <div className="flex gap-4">
-                    {yesBtn(() => handleAssetAnswer("yes"))}
-                    {noBtn(() => handleAssetAnswer("no"))}
-                  </div>
-                  {currentAssetQ.threeWay && (
+                {currentAssetQ.type === "numeric-input" ? (
+                  <>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder={currentAssetQ.placeholder || "0"}
+                      value={numericInputValue}
+                      onChange={(e) => setNumericInputValue(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleAssetNumericSubmit(); }}
+                      className="w-full border border-blue-200 rounded-lg px-4 py-2 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-6"
+                    />
                     <button
-                      onClick={() => handleAssetAnswer("na")}
+                      onClick={handleAssetNumericSubmit}
                       disabled={submitting || !dealId}
-                      className="w-full text-sm text-gray-500 hover:text-blue-600 hover:bg-blue-50 py-2.5 rounded-lg border border-gray-200 hover:border-blue-200 transition-colors"
+                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold py-3 rounded-lg transition-colors"
                     >
-                      Independent contractors are not utilized.
+                      {submitting ? "Saving…" : "Continue →"}
                     </button>
-                  )}
-                </div>
-                {!dealId && (
-                  <p className="text-xs text-gray-400 text-center mt-5">
-                    No deal ID found. Please start from the{" "}
-                    <Link href="/intake" className="text-blue-500 underline">intake form</Link>.
-                  </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex gap-4">
+                        {yesBtn(() => handleAssetAnswer("yes"))}
+                        {noBtn(() => handleAssetAnswer("no"))}
+                      </div>
+                      {currentAssetQ.threeWay && (
+                        <button
+                          onClick={() => handleAssetAnswer("na")}
+                          disabled={submitting || !dealId}
+                          className="w-full text-sm text-gray-500 hover:text-blue-600 hover:bg-blue-50 py-2.5 rounded-lg border border-gray-200 hover:border-blue-200 transition-colors"
+                        >
+                          Independent contractors are not utilized.
+                        </button>
+                      )}
+                    </div>
+                    {!dealId && (
+                      <p className="text-xs text-gray-400 text-center mt-5">
+                        No deal ID found. Please start from the{" "}
+                        <Link href="/intake" className="text-blue-500 underline">intake form</Link>.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -760,6 +895,32 @@ export default function Questionnaire() {
                   {yesBtn(() => handleEquityAnswer("yes"))}
                   {noBtn(() => handleEquityAnswer("no"))}
                 </div>
+              </div>
+            )}
+
+            {/* ── Equity: Numeric input (financial data) ── */}
+            {equityView === "numeric-input" && currentEquityQ && (
+              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
+                <p className="text-gray-800 text-base font-medium leading-relaxed mb-6">
+                  {currentEquityQ.text}
+                </p>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder={currentEquityQ.placeholder || "0"}
+                  value={numericInputValue}
+                  onChange={(e) => setNumericInputValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleEquityNumericSubmit(); }}
+                  className="w-full border border-blue-200 rounded-lg px-4 py-2 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-6"
+                />
+                {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2 mb-4">{error}</p>}
+                <button
+                  onClick={handleEquityNumericSubmit}
+                  disabled={submitting || !dealId}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold py-3 rounded-lg transition-colors"
+                >
+                  {submitting ? "Saving…" : "Continue →"}
+                </button>
               </div>
             )}
 

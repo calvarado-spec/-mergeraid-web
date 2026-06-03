@@ -13,6 +13,9 @@ const VALID_QUESTION_IDS = new Set([
   "exemption_certs", "use_tax_review",
   "employment_tax_states", "contractor_classification",
   "property_tax", "unclaimed_property",
+  // financial input questions
+  "gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3",
+  "officer_comp", "erc_amount", "contractor_count",
   // equity questions
   "entity_type",
   "scorp_single_class", "scorp_shareholder_count", "scorp_eligible_shareholders",
@@ -23,7 +26,11 @@ const VALID_QUESTION_IDS = new Set([
 ]);
 const VALID_ANSWERS = new Set(["yes", "no", "na", "scorp", "ccorp", "pship"]);
 // ccorp_nol_amount accepts a free-form dollar string; skip the enum check for it
-const FREE_FORM_QUESTIONS = new Set(["ccorp_nol_amount"]);
+const FREE_FORM_QUESTIONS = new Set([
+  "ccorp_nol_amount",
+  "gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3",
+  "officer_comp", "erc_amount", "contractor_count",
+]);
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {

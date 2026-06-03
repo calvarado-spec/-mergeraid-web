@@ -98,6 +98,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       deal: dealResult.rows[0],
       risks: computeRisks(answersResult.rows),
+      answers: answersResult.rows,
       stateSales: salesResult.rows,
     });
   } catch (err) {

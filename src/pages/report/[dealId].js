@@ -1,6 +1,7 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
+import { calculateExposures } from "../../lib/exposureEngine";
 
 // ─── Static metadata per risk category ───────────────────────────────────────
 
@@ -51,6 +52,10 @@ const CATEGORIES_ORDER = [
   "Property Tax",
   "Unclaimed Property",
 ];
+
+function fmtExp(n) {
+  return "$" + Math.round(n).toLocaleString("en-US");
+}
 
 function fmtCurrency(n) {
   if (n == null) return "—";
@@ -218,6 +223,21 @@ const STYLES = `
     white-space: nowrap;
   }
 
+  /* ── Exposure summary ───────────────────────────────────── */
+  .exposure-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+    margin-bottom: 16px;
+  }
+  .exposure-th { background: #1e3a5f; color: #fff; padding: 9px 12px; text-align: left; font-family: Georgia, serif; font-weight: bold; }
+  .exposure-th-right { background: #1e3a5f; color: #fff; padding: 9px 12px; text-align: right; font-family: Georgia, serif; font-weight: bold; }
+  .exposure-td { padding: 8px 12px; border-bottom: 1px solid #e4e4e4; vertical-align: top; color: #333; }
+  .exposure-td-desc { padding: 8px 12px; border-bottom: 1px solid #e4e4e4; color: #555; font-size: 8.5pt; }
+  .exposure-td-right { padding: 8px 12px; border-bottom: 1px solid #e4e4e4; text-align: right; color: #333; white-space: nowrap; }
+  .exposure-total { font-weight: bold; color: #1e3a5f; background: #eef2f7; }
+  .exposure-disclaimer { font-size: 7.5pt; color: #999; line-height: 1.55; font-style: italic; border-top: 1px solid #e4e4e4; padding-top: 10px; margin-top: 4px; }
+
   /* ── Detailed findings ──────────────────────────────────── */
   .section-block {
     margin-bottom: 32px;
@@ -340,7 +360,8 @@ export default function ReportPage() {
     );
   }
 
-  const { deal, risks, stateSales } = data;
+  const { deal, risks, answers, stateSales } = data;
+  const exposures = calculateExposures(answers || [], stateSales || []);
 
   const risksByCategory = {};
   for (const risk of risks) {
@@ -529,6 +550,49 @@ export default function ReportPage() {
             </>
           )}
         </div>
+
+        {/* EXPOSURE SUMMARY */}
+        {exposures.length > 0 && (() => {
+          const totalLow = exposures.reduce((s, e) => s + e.lowEstimate, 0);
+          const totalHigh = exposures.reduce((s, e) => s + e.highEstimate, 0);
+          return (
+            <div className="report-section">
+              <h2 className="section-heading">Estimated Tax Exposure Summary</h2>
+              <table className="exposure-table">
+                <thead>
+                  <tr>
+                    <th className="exposure-th" style={{ width: "22%" }}>Risk Category</th>
+                    <th className="exposure-th">Description</th>
+                    <th className="exposure-th-right" style={{ width: "14%" }}>Low Estimate</th>
+                    <th className="exposure-th-right" style={{ width: "14%" }}>High Estimate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exposures.map((e, i) => (
+                    <tr key={i}>
+                      <td className="exposure-td">{e.category}</td>
+                      <td className="exposure-td-desc">{e.description}</td>
+                      <td className="exposure-td-right">{fmtExp(e.lowEstimate)}</td>
+                      <td className="exposure-td-right">{fmtExp(e.highEstimate)}</td>
+                    </tr>
+                  ))}
+                  <tr className="exposure-total">
+                    <td className="exposure-td" colSpan={2} style={{ fontWeight: "bold", color: "#1e3a5f" }}>Total Estimated Exposure</td>
+                    <td className="exposure-td-right" style={{ fontWeight: "bold", color: "#1e3a5f" }}>{fmtExp(totalLow)}</td>
+                    <td className="exposure-td-right" style={{ fontWeight: "bold", color: "#1e3a5f" }}>{fmtExp(totalHigh)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="exposure-disclaimer">
+                Exposure estimates are based on information provided through the MergerAid screening
+                questionnaire and are intended solely for due diligence planning purposes. These
+                estimates do not constitute tax advice and may not reflect all applicable taxes,
+                penalties, or interest. Consult a qualified tax advisor before making any decisions
+                based on these figures.
+              </p>
+            </div>
+          );
+        })()}
 
         {/* PAGE 4+ — DETAILED FINDINGS */}
         {riskyCategories.length > 0 && (
