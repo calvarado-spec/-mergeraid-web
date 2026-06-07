@@ -143,6 +143,11 @@ export default function LoginPage() {
               >
                 {submitting ? "Signing In…" : "Sign In"}
               </button>
+              <p className="text-center text-sm">
+                <Link href="/forgot-password" className="text-blue-600 hover:underline">
+                  Forgot password?
+                </Link>
+              </p>
             </form>
           ) : (
             <form onSubmit={handleRegister} className="space-y-5">
