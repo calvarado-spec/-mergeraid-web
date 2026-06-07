@@ -133,8 +133,7 @@ export default function Terms() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-800 mb-3">11. Governing Law and Dispute Resolution</h2>
             <p className="text-gray-700 leading-relaxed">
-              These Terms shall be governed by the laws of the State of Florida without regard to conflict of law
-              principles. Any dispute arising out of or related to these Terms shall be resolved by binding arbitration
+              Any dispute arising out of or related to these Terms shall be resolved by binding arbitration
               administered by the American Arbitration Association under its Commercial Arbitration Rules. You waive any
               right to participate in a class action lawsuit or class-wide arbitration. These Terms shall be governed
               by the laws of the State of Florida without regard to conflict of law principles, provided that if
@@ -200,6 +199,15 @@ export default function Terms() {
               The Company shall not be liable for any failure or delay in performance resulting from causes beyond its
               reasonable control, including but not limited to acts of God, natural disasters, pandemic, war, terrorism,
               government action, internet or infrastructure outages, or third-party service failures.
+            </p>
+          </section>
+
+          <section className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-800 mb-3">18. Entire Agreement</h2>
+            <p className="text-gray-700 leading-relaxed">
+              These Terms constitute the entire agreement between you and MergerAid LLC with respect to the Platform
+              and supersede all prior agreements, representations, and understandings. If any provision of these Terms
+              is found to be unenforceable, the remaining provisions will continue in full force and effect.
             </p>
           </section>
         </div>
