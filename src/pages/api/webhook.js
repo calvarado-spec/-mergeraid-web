@@ -64,6 +64,19 @@ export default async function handler(req, res) {
       const priceId = full.line_items?.data[0]?.price?.id ?? null;
       const planType = getPlanType(priceId);
 
+      // One-time payment sessions may not attach a customer — create one so we
+      // always have a stripe_customer_id to store.
+      let resolvedCustomerId = session.customer;
+      if (!resolvedCustomerId) {
+        const details = session.customer_details ?? {};
+        const created = await stripe.customers.create({
+          email: details.email ?? undefined,
+          name: details.name ?? undefined,
+          metadata: { userId },
+        });
+        resolvedCustomerId = created.id;
+      }
+
       await pool.query(
         `UPDATE users
          SET subscription_status    = 'active',
@@ -71,7 +84,7 @@ export default async function handler(req, res) {
              stripe_customer_id     = $2,
              subscription_updated_at = NOW()
          WHERE id = $3::uuid`,
-        [planType, customerId, userId]
+        [planType, resolvedCustomerId, userId]
       );
     }
 
