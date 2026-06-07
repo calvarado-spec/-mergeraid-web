@@ -15,7 +15,12 @@ export default async function handler(req, res) {
 
   try {
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      payment_method_types: ['card', 'us_bank_account'],
+      payment_method_options: {
+        us_bank_account: {
+          financial_connections: { permissions: ['payment_method'] },
+        },
+      },
       line_items: [{ price: priceId, quantity: 1 }],
       mode: priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_SINGLE ? 'payment' : 'subscription',
       success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/dashboard?payment=success`,
