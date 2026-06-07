@@ -22,6 +22,7 @@ export default function PricingPage() {
   const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
   const [invoiceError, setInvoiceError] = useState("");
   const [invoiceSuccess, setInvoiceSuccess] = useState(false);
+  const [invoiceUrl, setInvoiceUrl] = useState(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -41,6 +42,7 @@ export default function PricingPage() {
     setInvoiceModal(null);
     setInvoiceError("");
     setInvoiceSuccess(false);
+    setInvoiceUrl(null);
   }
 
   async function handleInvoiceSubmit(e) {
@@ -58,6 +60,7 @@ export default function PricingPage() {
         setInvoiceError(data.error || "Something went wrong. Please try again.");
         return;
       }
+      setInvoiceUrl(data.invoiceUrl || null);
       setInvoiceSuccess(true);
     } catch {
       setInvoiceError("Network error. Please try again.");
@@ -222,16 +225,30 @@ export default function PricingPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">Request Received</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">Invoice Sent</h3>
                 <p className="text-sm text-gray-500 mb-6">
-                  We&apos;ll send your invoice to <span className="font-medium text-gray-700">{invoiceForm.email}</span> shortly.
+                  Your invoice has been sent to{" "}
+                  <span className="font-medium text-gray-700">{invoiceForm.email}</span>.
+                  Check your inbox for a payment link from Stripe.
                 </p>
-                <button
-                  onClick={closeInvoiceModal}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors"
-                >
-                  Done
-                </button>
+                <div className="flex flex-col gap-3">
+                  {invoiceUrl && (
+                    <a
+                      href={invoiceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors text-center"
+                    >
+                      View Invoice
+                    </a>
+                  )}
+                  <button
+                    onClick={closeInvoiceModal}
+                    className="w-full border border-gray-300 text-gray-600 px-6 py-2 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
               </div>
             ) : (
               <>

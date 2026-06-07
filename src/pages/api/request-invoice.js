@@ -12,14 +12,16 @@
   );
 */
 
+import Stripe from "stripe";
 import { Pool } from "pg";
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const PLAN_LABELS = {
-  single: "Single Use — $2,500",
-  monthly: "Monthly Access — $9,000/mo",
-  annual: "Annual Access — $70,000/yr",
+const PLAN_PRICES = {
+  single:  { label: "MergerAid — Single Use",      amount: 250000  },
+  monthly: { label: "MergerAid — Monthly Access",   amount: 900000  },
+  annual:  { label: "MergerAid — Annual Access",    amount: 7000000 },
 };
 
 export default async function handler(req, res) {
@@ -29,52 +31,51 @@ export default async function handler(req, res) {
   if (!firstName || !lastName || !firmName || !email || !plan) {
     return res.status(400).json({ error: "All fields are required." });
   }
-  if (!PLAN_LABELS[plan]) {
+  if (!PLAN_PRICES[plan]) {
     return res.status(400).json({ error: "Invalid plan." });
   }
 
+  const { label, amount } = PLAN_PRICES[plan];
+
   try {
+    // 1. Create Stripe customer
+    const customer = await stripe.customers.create({
+      name: `${firstName} ${lastName}`,
+      email,
+      metadata: { firm_name: firmName },
+    });
+
+    // 2. Add an invoice item for the selected plan
+    await stripe.invoiceItems.create({
+      customer: customer.id,
+      amount,
+      currency: "usd",
+      description: label,
+    });
+
+    // 3. Create the invoice (send_invoice = manual payment via email link)
+    const invoice = await stripe.invoices.create({
+      customer: customer.id,
+      collection_method: "send_invoice",
+      days_until_due: 30,
+    });
+
+    // 4. Finalize so it gets an invoice number and hosted URL
+    const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
+
+    // 5. Send — Stripe emails the customer a payment link automatically
+    const sent = await stripe.invoices.sendInvoice(finalized.id);
+
+    // 6. Record in Supabase
     await pool.query(
       `INSERT INTO invoice_requests (first_name, last_name, firm_name, email, plan)
        VALUES ($1, $2, $3, $4, $5)`,
       [firstName, lastName, firmName, email, plan]
     );
+
+    return res.status(200).json({ ok: true, invoiceUrl: sent.hosted_invoice_url });
   } catch (err) {
-    console.error("invoice_requests insert error:", err);
-    return res.status(500).json({ error: "Database error." });
+    console.error("request-invoice error:", err);
+    return res.status(500).json({ error: "Failed to create invoice. Please try again." });
   }
-
-  const planLabel = PLAN_LABELS[plan];
-
-  if (process.env.RESEND_API_KEY) {
-    try {
-      const { Resend } = await import("resend");
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      await resend.emails.send({
-        from: "MergerAid <noreply@mergeraid.com>",
-        to: "support@mergeraid.com",
-        subject: `Invoice Request — ${planLabel}`,
-        text: [
-          "New invoice request received:",
-          "",
-          `Name:  ${firstName} ${lastName}`,
-          `Firm:  ${firmName}`,
-          `Email: ${email}`,
-          `Plan:  ${planLabel}`,
-        ].join("\n"),
-      });
-    } catch (err) {
-      console.error("Resend email error:", err);
-    }
-  } else {
-    console.log("[request-invoice] No RESEND_API_KEY — logging request:", {
-      firstName,
-      lastName,
-      firmName,
-      email,
-      plan: planLabel,
-    });
-  }
-
-  return res.status(200).json({ ok: true });
 }
