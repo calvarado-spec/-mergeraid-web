@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import Image from "next/image";
 
 const NAV_LINKS = [
   { href: "/about", label: "About" },
@@ -39,9 +38,8 @@ export default function Navbar() {
       <header className="w-full bg-white shadow-sm px-4 sm:px-6 flex justify-between items-center border-b fixed top-0 z-50 h-16">
         {/* Logo */}
         <div className="flex items-center space-x-2">
-          <Image src="/images/mergeraid-logo.png" alt="MergerAid Logo" width={32} height={32} />
           <Link href="/">
-            <span style={{ fontFamily: 'sans-serif', fontSize: '22px', fontWeight: 500, color: '#1d4ed8', letterSpacing: '-0.3px', cursor: 'pointer' }}>MergerAid</span>
+            <span className="text-xl sm:text-2xl font-bold text-blue-700 cursor-pointer">MergerAid</span>
           </Link>
         </div>
 
