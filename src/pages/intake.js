@@ -178,6 +178,10 @@ export default function Intake() {
                 and confirm the information provided is accurate.
               </label>
             </div>
+            <p className="text-xs text-gray-400">
+              MergerAid is a preliminary screening tool only. It does not perform tax due diligence and does
+              not constitute tax or legal advice.
+            </p>
 
             {error && (
               <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">

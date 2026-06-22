@@ -48,7 +48,7 @@ export default function PricingPage() {
       <main className="flex-1 px-4 py-16 mt-20">
         <h1 className="text-4xl font-bold text-center mb-4 text-blue-700">Pricing Plans</h1>
         <p className="text-center text-gray-500 mb-12 max-w-xl mx-auto">
-          Choose the plan that fits your deal volume. All plans include full access to asset and equity diligence flows.
+          Choose the plan that fits your deal volume. All plans include full access to asset and equity screening flows.
         </p>
 
         {error && (
@@ -61,7 +61,7 @@ export default function PricingPage() {
           <div className="border border-gray-200 rounded-2xl shadow p-6 flex flex-col justify-between">
             <div>
               <h2 className="text-2xl font-semibold mb-2">Single Use</h2>
-              <p className="text-gray-600 mb-4">Perfect for one-time due diligence reports.</p>
+              <p className="text-gray-600 mb-4">Perfect for one-time tax risk screening reports.</p>
               <p className="text-3xl font-bold mb-4">$2,500</p>
               <ul className="text-sm text-gray-700 space-y-2 mb-6">
                 <li>✓ One report per purchase</li>
@@ -87,7 +87,7 @@ export default function PricingPage() {
                 $9,000<span className="text-lg font-medium text-gray-600">/mo</span>
               </p>
               <ul className="text-sm text-gray-700 space-y-2 mb-6">
-                <li>✓ Unlimited due diligence reports</li>
+                <li>✓ Unlimited screening reports</li>
                 <li>✓ Best for short-term projects</li>
                 <li>✓ Ideal for busy deal months</li>
               </ul>

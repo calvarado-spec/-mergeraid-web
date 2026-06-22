@@ -52,7 +52,8 @@ export default function Privacy() {
             <p className="text-gray-700 leading-relaxed">
               We treat all deal-specific information you input into the Platform as confidential. We do not access,
               review, or share your deal data except as required to operate the Platform or comply with legal requirements.
-              Our employees and contractors are bound by confidentiality obligations.
+              This includes processing deal data in anonymized, aggregated form to improve Platform functionality, as
+              described in our Terms of Service. Our employees and contractors are bound by confidentiality obligations.
             </p>
           </section>
 

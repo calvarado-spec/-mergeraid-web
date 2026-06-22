@@ -55,7 +55,7 @@ export default function Dashboard() {
             </div>
             <Link href="/intake" className="flex-shrink-0">
               <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg transition-colors text-sm sm:text-base">
-                + New Diligence
+                + New Screening
               </button>
             </Link>
           </div>
@@ -64,11 +64,11 @@ export default function Dashboard() {
           {deals.length === 0 ? (
             <div className="text-center py-16 sm:py-20 border border-blue-100 rounded-2xl bg-blue-50 px-4">
               <p className="text-gray-500 text-base mb-5">
-                No engagements yet. Start your first diligence.
+                No engagements yet. Start your first screening.
               </p>
               <Link href="/intake">
                 <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors">
-                  Start Diligence →
+                  Start Screening →
                 </button>
               </Link>
             </div>

@@ -1258,7 +1258,7 @@ export default function Questionnaire() {
             </div>
             <h2 className="text-xl font-bold text-blue-700 mb-2">Questionnaire Complete</h2>
             <p className="text-gray-500 text-sm mb-8">
-              Diligence questionnaire complete. Your risk summary is being prepared.
+              Screening questionnaire complete. Your risk summary is being prepared.
             </p>
             <a
               href={`/results?dealId=${dealId}`}

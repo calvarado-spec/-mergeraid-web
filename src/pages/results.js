@@ -84,7 +84,7 @@ export default function Results() {
           <div className="mb-10 print:mb-6">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5">
               <h2 className="text-xl font-semibold text-gray-800">
-                Tax Due Diligence Risk Summary
+                Tax Risk Screening Summary
               </h2>
               <a
                 href={`/report/${dealId}`}
@@ -112,6 +112,13 @@ export default function Results() {
             <div className="mt-6 border-t border-blue-100" />
           </div>
 
+          {/* Disclaimer banner */}
+          <div className="mb-8 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            This screening report is based solely on self-reported information and does not constitute tax
+            advice, legal advice, or professional due diligence. Engage a qualified tax advisor before making
+            any transaction decisions.
+          </div>
+
           {/* All-clean callout */}
           {risks.length === 0 && (
             <div className="text-center py-14">
@@ -122,7 +129,8 @@ export default function Results() {
               </div>
               <p className="text-blue-700 font-semibold text-lg">No risks identified</p>
               <p className="text-gray-400 text-sm mt-1">
-                This deal appears clean across all tax categories.
+                No risk indicators were identified based on the information provided. This is a preliminary
+                screening result only and does not constitute a clean bill of health or tax clearance.
               </p>
             </div>
           )}

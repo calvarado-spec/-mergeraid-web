@@ -11,10 +11,10 @@ export default function Home() {
       {/* Hero */}
       <section className="text-center py-20 sm:py-28 px-5 bg-blue-50 mt-16">
         <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-blue-700 mb-4">
-          Tax Due Diligence At Your Fingertips
+          Tax Risk Screening At Your Fingertips
         </h2>
         <p className="text-base sm:text-lg max-w-2xl mx-auto text-gray-700 mb-8">
-          Streamline your asset and equity diligence reviews with guided, automated analysis built for small and mid-sized deals.
+          Streamline your asset and equity tax risk screening with a guided, automated questionnaire.
         </p>
         <Link href="/pricing">
           <button className="bg-blue-600 text-white px-6 py-3 rounded-xl text-lg hover:bg-blue-700 transition">
@@ -37,7 +37,7 @@ export default function Home() {
           </div>
           <div>
             <h4 className="text-xl font-semibold mb-2">PE-Ready Output</h4>
-            <p className="text-gray-600">Download or export reports that plug into your diligence memos.</p>
+            <p className="text-gray-600">Download screening reports to inform your diligence process.</p>
           </div>
         </div>
       </section>
