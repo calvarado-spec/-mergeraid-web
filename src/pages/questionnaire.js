@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
+import Papa from "papaparse";
+import * as XLSX from "xlsx";
 import FlowHeader from "../components/FlowHeader";
 import FlowStepper from "../components/FlowStepper";
 
@@ -16,6 +18,92 @@ const US_STATES = [
   "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
   "West Virginia", "Wisconsin", "Wyoming", "District of Columbia",
 ];
+
+const US_STATE_ABBR = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+  CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
+  HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+  KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi",
+  MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire",
+  NJ: "New Jersey", NM: "New Mexico", NY: "New York", NC: "North Carolina",
+  ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania",
+  RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee",
+  TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia", WA: "Washington",
+  WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming", DC: "District of Columbia",
+};
+
+function matchUSState(value) {
+  if (value == null) return null;
+  const v = String(value).trim();
+  if (!v) return null;
+  const fullMatch = US_STATES.find((s) => s.toLowerCase() === v.toLowerCase());
+  if (fullMatch) return fullMatch;
+  return US_STATE_ABBR[v.toUpperCase()] || null;
+}
+
+function parseDollarAmount(value) {
+  if (value == null) return null;
+  const cleaned = String(value).replace(/[^0-9.-]/g, "");
+  if (cleaned === "" || cleaned === "-") return null;
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? null : n;
+}
+
+// Takes a grid of raw cell values (array of arrays, as produced by Papa.parse
+// or XLSX sheet_to_json with header:1) and heuristically locates the state
+// column and up to 3 year/amount columns — no fixed header names required.
+function detectStateSalesFromGrid(rows) {
+  if (!rows || rows.length === 0) return [];
+  const filtered = rows
+    .map((r) => (Array.isArray(r) ? r : Object.values(r)))
+    .filter((r) => r.some((c) => String(c ?? "").trim() !== ""));
+  if (filtered.length === 0) return [];
+
+  // Skip a likely header row (one with no state matches and few numeric cells)
+  const firstRow = filtered[0];
+  const firstRowHasState = firstRow.some((c) => matchUSState(c));
+  const firstRowNumericCount = firstRow.filter((c) => parseDollarAmount(c) !== null).length;
+  const startIdx = !firstRowHasState && firstRowNumericCount < Math.ceil(firstRow.length / 2) ? 1 : 0;
+  const dataRows = filtered.slice(startIdx);
+  if (dataRows.length === 0) return [];
+
+  const numCols = Math.max(...dataRows.map((r) => r.length));
+
+  let stateColIdx = -1;
+  let bestStateMatches = 0;
+  for (let c = 0; c < numCols; c++) {
+    const matches = dataRows.filter((r) => matchUSState(r[c])).length;
+    if (matches > bestStateMatches) {
+      bestStateMatches = matches;
+      stateColIdx = c;
+    }
+  }
+
+  const numericCols = [];
+  for (let c = 0; c < numCols; c++) {
+    if (c === stateColIdx) continue;
+    const matches = dataRows.filter((r) => parseDollarAmount(r[c]) !== null).length;
+    if (matches > 0) numericCols.push(c);
+  }
+  const yearCols = numericCols.slice(0, 3);
+
+  const results = [];
+  for (const row of dataRows) {
+    const state = stateColIdx >= 0 ? matchUSState(row[stateColIdx]) : null;
+    const year1 = yearCols[0] !== undefined ? parseDollarAmount(row[yearCols[0]]) : null;
+    const year2 = yearCols[1] !== undefined ? parseDollarAmount(row[yearCols[1]]) : null;
+    const year3 = yearCols[2] !== undefined ? parseDollarAmount(row[yearCols[2]]) : null;
+    if (!state && year1 == null && year2 == null && year3 == null) continue;
+    results.push({
+      state: state || "",
+      year1: year1 != null ? String(year1) : "",
+      year2: year2 != null ? String(year2) : "",
+      year3: year3 != null ? String(year3) : "",
+    });
+  }
+  return results;
+}
 
 // ── Asset deal: 14-question flow ─────────────────────────────────────────────
 const QUESTIONS = {
@@ -395,13 +483,16 @@ export default function Questionnaire() {
   }, [dealId]);
 
   // ── Asset flow state ─────────────────────────────────────────────────────
-  // view: "question" | "state-select" | "state-sales" | "done"
+  // view: "question" | "state-select" | "state-upload-preview" | "state-sales" | "done"
   const [view, setView] = useState("question");
   const [questionId, setQuestionId] = useState("prior_reorg");
   const [questionNumber, setQuestionNumber] = useState(1);
   const [stateSelectContext, setStateSelectContext] = useState(null);
   const [selectedStates, setSelectedStates] = useState([]);
   const [stateSalesData, setStateSalesData] = useState({});
+  const [uploadPreviewRows, setUploadPreviewRows] = useState([]);
+  const [uploadDetectedAny, setUploadDetectedAny] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   // ── Equity flow state ────────────────────────────────────────────────────
   // equityView: "entity-select" | "question" | "text-input"
@@ -519,6 +610,82 @@ export default function Questionnaire() {
     const initial = {};
     for (const s of selectedStates) initial[s] = { year1: "", year2: "", year3: "" };
     setStateSalesData(initial);
+    setView("state-sales");
+  }
+
+  function parseCsvFile(file) {
+    return new Promise((resolve, reject) => {
+      Papa.parse(file, {
+        header: false,
+        skipEmptyLines: true,
+        complete: (results) => resolve(results.data),
+        error: reject,
+      });
+    });
+  }
+
+  async function parseExcelFile(file) {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+  }
+
+  async function handleSalesFileUpload(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadError("");
+
+    const name = file.name.toLowerCase();
+    try {
+      let rows;
+      if (name.endsWith(".csv")) {
+        rows = await parseCsvFile(file);
+      } else if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+        rows = await parseExcelFile(file);
+      } else {
+        setUploadError("Please upload a .csv or .xlsx file.");
+        return;
+      }
+      const detected = detectStateSalesFromGrid(rows);
+      setUploadDetectedAny(detected.length > 0);
+      setUploadPreviewRows(detected.length > 0 ? detected : [{ state: "", year1: "", year2: "", year3: "" }]);
+      setView("state-upload-preview");
+    } catch (err) {
+      console.error("File parse error:", err);
+      setUploadDetectedAny(false);
+      setUploadPreviewRows([{ state: "", year1: "", year2: "", year3: "" }]);
+      setView("state-upload-preview");
+    }
+  }
+
+  function updateUploadPreviewRow(idx, field, value) {
+    setUploadPreviewRows((prev) => prev.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
+  }
+
+  function removeUploadPreviewRow(idx) {
+    setUploadPreviewRows((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function addUploadPreviewRow() {
+    setUploadPreviewRows((prev) => [...prev, { state: "", year1: "", year2: "", year3: "" }]);
+  }
+
+  function applyUploadPreview() {
+    const valid = uploadPreviewRows.filter((r) => r.state && US_STATES.includes(r.state));
+    if (valid.length === 0) {
+      setUploadError("Select at least one state before continuing.");
+      return;
+    }
+    setUploadError("");
+    const states = [...new Set(valid.map((r) => r.state))];
+    const dataMap = {};
+    for (const r of valid) {
+      dataMap[r.state] = { year1: r.year1 || "", year2: r.year2 || "", year3: r.year3 || "" };
+    }
+    setSelectedStates(states);
+    setStateSalesData(dataMap);
     setView("state-sales");
   }
 
@@ -808,12 +975,127 @@ export default function Questionnaire() {
                     );
                   })}
                 </div>
+
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex-1 border-t border-gray-200" />
+                  <span className="text-xs text-gray-400 uppercase tracking-wide">or</span>
+                  <div className="flex-1 border-t border-gray-200" />
+                </div>
+                <label className="w-full flex items-center justify-center gap-2 border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium py-2.5 rounded-lg cursor-pointer transition-colors mb-3 text-sm">
+                  Upload Sales Data (.csv or .xlsx)
+                  <input
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    onChange={handleSalesFileUpload}
+                    className="hidden"
+                  />
+                </label>
+                {uploadError && (
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2 mb-4">{uploadError}</p>
+                )}
+
                 <button
                   onClick={handleStateSelectContinue}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
                 >
                   {selectedStates.length === 0 ? "Skip →" : `Enter Sales for ${selectedStates.length} State${selectedStates.length !== 1 ? "s" : ""} →`}
                 </button>
+              </div>
+            )}
+
+            {/* ── Asset: Uploaded sales data preview (editable) ── */}
+            {view === "state-upload-preview" && (
+              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
+                <div
+                  className={`mb-5 rounded-lg px-4 py-3 text-sm border ${
+                    uploadDetectedAny
+                      ? "bg-blue-50 text-blue-700 border-blue-200"
+                      : "bg-amber-50 text-amber-700 border-amber-200"
+                  }`}
+                >
+                  {uploadDetectedAny
+                    ? "We've pre-filled your data from the uploaded file. Please review and correct anything below before continuing."
+                    : "We couldn't automatically read your file. You can enter your data manually in the table below or try uploading a different file."}
+                </div>
+
+                <div className="overflow-x-auto mb-3 max-h-96">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
+                        <th className="pb-2 pr-2">State</th>
+                        <th className="pb-2 pr-2">Year 1</th>
+                        <th className="pb-2 pr-2">Year 2</th>
+                        <th className="pb-2 pr-2">Year 3</th>
+                        <th className="pb-2" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {uploadPreviewRows.map((row, idx) => (
+                        <tr key={idx} className="border-t border-gray-100">
+                          <td className="py-2 pr-2 min-w-[160px]">
+                            <select
+                              value={row.state}
+                              onChange={(e) => updateUploadPreviewRow(idx, "state", e.target.value)}
+                              className="w-full border border-blue-200 rounded-lg px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                            >
+                              <option value="">Select state…</option>
+                              {US_STATES.map((s) => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </select>
+                          </td>
+                          {["year1", "year2", "year3"].map((yr) => (
+                            <td key={yr} className="py-2 pr-2 min-w-[100px]">
+                              <input
+                                type="number" min="0" placeholder="0"
+                                value={row[yr]}
+                                onChange={(e) => updateUploadPreviewRow(idx, yr, e.target.value)}
+                                className="w-full border border-blue-200 rounded-lg px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                              />
+                            </td>
+                          ))}
+                          <td className="py-2 pl-1">
+                            <button
+                              onClick={() => removeUploadPreviewRow(idx)}
+                              className="text-gray-400 hover:text-red-600 text-sm px-2"
+                              title="Remove row"
+                              type="button"
+                            >
+                              ✕
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <button
+                  onClick={addUploadPreviewRow}
+                  className="text-sm text-blue-600 hover:underline mb-6"
+                  type="button"
+                >
+                  + Add State
+                </button>
+
+                {uploadError && (
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2 mb-4">{uploadError}</p>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setUploadError(""); setView("state-select"); }}
+                    className="flex-1 border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium py-3 rounded-lg transition-colors"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    onClick={applyUploadPreview}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
+                  >
+                    Use This Data →
+                  </button>
+                </div>
               </div>
             )}
 
