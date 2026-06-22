@@ -53,18 +53,9 @@ export default function ComingSoon() {
           <span style={{ color: "#fff", fontWeight: "bold", fontSize: "22px", fontFamily: "Georgia, serif" }}>M</span>
         </div>
 
-        <h1
-          style={{
-            fontSize: "38px",
-            fontWeight: "bold",
-            color: "#60a5fa",
-            marginBottom: "10px",
-            letterSpacing: "-0.5px",
-            fontFamily: "Georgia, serif",
-          }}
-        >
-          MergerAid
-        </h1>
+        <div style={{ marginBottom: "10px" }}>
+          <span style={{ fontFamily: 'sans-serif', fontSize: '22px', fontWeight: 500, color: '#1d4ed8', letterSpacing: '-0.3px' }}>MergerAid</span>
+        </div>
 
         <p
           style={{

@@ -85,7 +85,7 @@ export default function LoginPage() {
       {/* Logo */}
       <Link href="/" className="flex items-center gap-2 mb-8">
         <Image src="/images/mergeraid-logo.png" alt="MergerAid Logo" width={32} height={32} />
-        <span className="text-2xl font-bold text-blue-700">MergerAid</span>
+        <span style={{ fontFamily: 'sans-serif', fontSize: '22px', fontWeight: 500, color: '#1d4ed8', letterSpacing: '-0.3px' }}>MergerAid</span>
       </Link>
 
       <div className="w-full max-w-md bg-white rounded-2xl shadow-md overflow-hidden">

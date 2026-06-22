@@ -41,7 +41,7 @@ export default function Navbar() {
         <div className="flex items-center space-x-2">
           <Image src="/images/mergeraid-logo.png" alt="MergerAid Logo" width={32} height={32} />
           <Link href="/">
-            <span className="text-xl sm:text-2xl font-bold text-blue-700 cursor-pointer">MergerAid</span>
+            <span style={{ fontFamily: 'sans-serif', fontSize: '22px', fontWeight: 500, color: '#1d4ed8', letterSpacing: '-0.3px', cursor: 'pointer' }}>MergerAid</span>
           </Link>
         </div>
 
