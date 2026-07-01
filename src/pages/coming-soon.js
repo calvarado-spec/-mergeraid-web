@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useRouter } from "next/router";
 
 export default function ComingSoon() {
-  const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const router = useRouter();
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -27,6 +27,8 @@ export default function ComingSoon() {
         alignItems: "center",
         justifyContent: "center",
         fontFamily: "Arial, Helvetica, sans-serif",
+        padding: "24px 16px",
+        boxSizing: "border-box",
       }}
     >
       <div
@@ -34,17 +36,15 @@ export default function ComingSoon() {
           textAlign: "center",
           width: "100%",
           maxWidth: "400px",
-          padding: "0 24px",
         }}
       >
-        {/* Logo / Brand */}
         <div
           style={{
             width: "48px",
             height: "48px",
             background: "#1d4ed8",
             borderRadius: "12px",
-            margin: "0 auto 20px",
+            margin: "0 auto 16px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -53,30 +53,21 @@ export default function ComingSoon() {
           <span style={{ color: "#fff", fontWeight: "bold", fontSize: "22px", fontFamily: "Georgia, serif" }}>M</span>
         </div>
 
-        <div style={{ marginBottom: "10px" }}>
-          <span style={{ fontFamily: 'sans-serif', fontSize: '22px', fontWeight: 500, color: '#1d4ed8', letterSpacing: '-0.3px' }}>MergerAid</span>
+        <div style={{ marginBottom: "12px" }}>
+          <span style={{ fontFamily: "sans-serif", fontSize: "22px", fontWeight: 600, color: "#ffffff", letterSpacing: "-0.3px" }}>
+            MergerAid
+          </span>
         </div>
 
-        <p
-          style={{
-            fontSize: "17px",
-            color: "#94a3b8",
-            marginBottom: "44px",
-            lineHeight: "1.5",
-          }}
-        >
+        <p style={{ fontSize: "16px", color: "#94a3b8", margin: "0 0 40px", lineHeight: "1.6" }}>
           Something powerful is coming.
         </p>
 
-        {/* Password form */}
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           <input
             type="password"
             value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              setError("");
-            }}
+            onChange={(e) => { setPassword(e.target.value); setError(""); }}
             placeholder="Enter access password"
             autoComplete="current-password"
             style={{
@@ -89,13 +80,12 @@ export default function ComingSoon() {
               color: "#f1f5f9",
               outline: "none",
               letterSpacing: "0.05em",
+              boxSizing: "border-box",
             }}
           />
 
           {error && (
-            <p style={{ color: "#f87171", fontSize: "13.5px", margin: "0" }}>
-              {error}
-            </p>
+            <p style={{ color: "#f87171", fontSize: "13.5px", margin: "0" }}>{error}</p>
           )}
 
           <button
@@ -120,7 +110,7 @@ export default function ComingSoon() {
         </form>
 
         <p style={{ marginTop: "40px", fontSize: "11px", color: "#334155", letterSpacing: "0.05em" }}>
-          © {new Date().getFullYear()} MergerAid. All rights reserved.
+          &copy; 2025 MergerAid. All rights reserved.
         </p>
       </div>
     </div>
