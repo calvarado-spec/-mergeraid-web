@@ -393,8 +393,9 @@ const EQUITY_QUESTIONS = {
     type: "numeric-input", placeholder: "e.g. 5000000",
   },
   officer_comp: {
-    text: "Total Officer/Shareholder W-2 Compensation (most recent year)",
+    text: "Total Combined Officer/Shareholder W-2 Compensation — All Shareholders (most recent year)",
     type: "numeric-input", placeholder: "e.g. 120000",
+    helperNote: "Enter total W-2 wages paid to all officer-shareholders combined. Do not include distributions, dividends, or 1099 payments.",
   },
 };
 
@@ -424,7 +425,7 @@ const TOOLTIPS = {
   exemption_certs: "Exemption certificates are documents provided by customers claiming they are exempt from sales tax — for example, resellers or exempt organizations. Without valid certificates on file, the seller may be liable for uncollected tax under audit.",
   use_tax_review: "Use tax applies when a company purchases goods or services without paying sales tax — for example, from an out-of-state vendor who did not charge tax. Companies are generally required to self-assess and remit use tax on these purchases.",
   employment_tax_states: "If employees live or work in states where the company does not file employment tax returns, the company may owe payroll taxes, unemployment insurance, and other withholding obligations in those states.",
-  contractor_classification: "The IRS and states use specific criteria to determine whether a worker is an employee or an independent contractor. Misclassification can result in significant payroll tax liability, penalties, and interest.",
+  contractor_classification: "The IRS and states use specific criteria to determine whether a worker is an employee or an independent contractor. Misclassification can result in significant payroll tax liability, penalties, and interest. Factors that generally indicate independent contractor status include: the worker sets their own schedule, works for multiple clients, is not economically dependent on the Company, uses their own tools and equipment, and is engaged for a specific project or defined scope of work. Workers who perform the same functions as employees on a full-time or ongoing basis present higher reclassification risk regardless of how they are classified.",
   property_tax: "Real and personal property tax returns are required in most states where a company owns or leases property, equipment, or other tangible assets. Failure to file can result in penalties and back taxes.",
   unclaimed_property: "Unclaimed property laws require companies to report and remit uncashed checks, unused customer credits, and other abandoned property to the state after a dormancy period, typically 3 to 5 years.",
   entity_type: "The entity type determines how the company is taxed and which specific diligence questions apply. S corporations, C corporations, and partnerships each have distinct tax rules and risk areas.",
@@ -1205,8 +1206,11 @@ export default function Questionnaire() {
                   value={numericInputValue}
                   onChange={(e) => setNumericInputValue(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") handleEquityNumericSubmit(); }}
-                  className="w-full border border-blue-200 rounded-lg px-4 py-2 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-6"
+                  className="w-full border border-blue-200 rounded-lg px-4 py-2 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-2"
                 />
+                {currentEquityQ.helperNote && (
+                  <p className="text-xs text-gray-400 mt-1 mb-4">{currentEquityQ.helperNote}</p>
+                )}
                 {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2 mb-4">{error}</p>}
                 <button
                   onClick={handleEquityNumericSubmit}

@@ -11,13 +11,13 @@ function computeRisks(answers) {
   const add = (category, text) => risks.push({ category, text });
 
   // ── Federal Tax ──────────────────────────────────────────────────────────
-  if (a.prior_diligence === "no") {
-    add("Federal Tax", "Potential Risk. Further diligence should be done to understand any potential risk (unpaid fees or taxes as a result of the acquisition or disposition).");
+  if (a.prior_reorg === "yes" && a.prior_diligence === "no") {
+    add("Federal Tax", "Potential risk that tax liabilities from prior reorganizations or acquisitions were not identified prior to closing. Recommend reviewing prior transaction documents and any available tax diligence from that transaction.");
   }
 
   // ERC: Q3 2021 specific exposure
   if (a.erc_received_2yr === "yes" && a.erc_q3_2021 === "yes") {
-    add("Federal Tax", "Potential Risk in the amount of ERC received until the statute of limitations expires on 04/15/2027.");
+    add("Federal Tax", "Potential risk in the amount of ERC received. The statute of limitations for Q3 2021 credits runs through April 15, 2027, or 2 years from the date the credit was received, whichever is later.");
   }
 
   // ERC: general statute-of-limitations exposure whenever ERC sub-questions were reached
@@ -26,26 +26,28 @@ function computeRisks(answers) {
   }
 
   if (a.tax_exam_resolved === "no") {
-    add("Federal Tax", "Potential Risk, resulting in the amount of the examination. Monitor results.");
+    add("Federal Tax", "Low to moderate risk. The Company has been subject to a tax examination that has been resolved. Recommend confirming all assessments have been paid in full, that amended returns were filed where required, and that any procedural deficiencies identified during the audit have been addressed.");
   }
 
-  // Any answer to related_party_fmv means related-party transactions exist
-  if (a.related_party_fmv !== undefined) {
-    add("Federal Tax", "Potential Risk, resulting in the amount of the examination. Monitor results.");
+  if (a.related_party === "yes" && a.related_party_fmv === "no") {
+    add("Federal Tax", "Elevated risk that related party transactions not conducted at fair market value may be recharacterized by the IRS, resulting in additional taxable income, denied deductions, or other adjustments. Recommend obtaining documentation supporting the pricing of all related party transactions.");
+  }
+  if (a.related_party === "yes" && a.related_party_fmv === "yes") {
+    add("Federal Tax", "Low risk. The Company has related party transactions conducted at fair market value. Recommend confirming that contemporaneous documentation exists to support FMV pricing in the event of an audit.");
   }
 
   // ── State Income Tax ─────────────────────────────────────────────────────
   if (a.income_tax_nexus === "yes") {
-    add("State Income Tax", "Risk that the Company may have filing obligations in states where they have sales but do not currently file.");
+    add("State Income Tax", "Risk that the Company may have state income tax filing obligations in states where it has sales. Applicability depends on the volume of sales, the nature of the business activity, and whether P.L. 86-272 protections apply. Review sales by state to assess nexus exposure and quantify potential liability.");
   }
 
   if (a.physical_nexus === "yes") {
-    add("State Income Tax", "Potential Risk. If physical presence: C corp - Blended rate. All others - use formula.");
+    add("State Income Tax", "Risk that physical presence in states where the Company does not currently file may create state income tax filing obligations. For C corporations, exposure is estimated using a blended federal and state rate applied to apportioned income. For pass-through entities, exposure is estimated using an apportionment formula at the owner level. Recommend reviewing employee locations, contractor locations, and property situs by state.");
   }
 
   // ── Sales & Use Tax ──────────────────────────────────────────────────────
   if (a.sales_tax_nexus === "yes") {
-    add("Sales & Use Tax", "Risk that the Company may have filing obligations in states where they have sales but do not currently file.");
+    add("Sales & Use Tax", "Risk that the Company may have sales and use tax filing obligations in states where it has sales. Applicability depends on whether the Company has crossed economic nexus thresholds, which vary by state but are commonly $100,000 in sales or 200 transactions annually. Review sales by state to identify states where nexus may exist.");
   }
 
   if (a.exemption_certs === "no") {
@@ -53,26 +55,33 @@ function computeRisks(answers) {
   }
 
   if (a.use_tax_review === "no") {
-    add("Sales & Use Tax", "Risk of unpaid use tax on purchases.");
+    add("Sales & Use Tax", "Risk of unpaid use tax on purchases from vendors that did not collect sales tax. Exposure is generally limited to purchases from out-of-state vendors not registered in the Company's state. Purchases from major retailers that collect sales tax broadly present minimal risk. Recommend reviewing vendor invoices for instances where tax was not charged.");
   }
 
   // ── Employment Tax ───────────────────────────────────────────────────────
   if (a.employment_tax_states === "yes") {
-    add("Employment Tax", "Risk of employment tax due in those states.");
+    add("Employment Tax", "Risk of employment tax filing obligations in states where employees reside or travel to perform services. Employees who reside in another state create definitive nexus requiring payroll tax registration and filing. De minimis travel may not create an obligation depending on the state but should be monitored. Travel to perform services will generally create an employment tax filing obligation. Recommend reviewing employee rosters by state of residence and work location.");
   }
 
   if (a.contractor_classification === "no") {
     add("Employment Tax", "Risk of employment tax exposure on independent contractor compensation.");
   }
 
+  if (a.entity_type === "scorp") {
+    const rawComp = a.officer_comp != null ? parseFloat(String(a.officer_comp).replace(/[^0-9.-]/g, "")) : NaN;
+    if (!isNaN(rawComp) && rawComp < 150000) {
+      add("Employment Tax", "If officer/shareholder W-2 compensation is determined to be below a reasonable level, the IRS may recharacterize a portion of distributions as wages subject to employment tax. Recommend benchmarking officer compensation against industry comparables to assess exposure.");
+    }
+  }
+
   // ── Property Tax ─────────────────────────────────────────────────────────
   if (a.property_tax === "no") {
-    add("Property Tax", "Property tax risk in states where they have property but are not filing.");
+    add("Property Tax", "Risk of property tax liability in states where the Company owns or leases real or personal property but has not filed property tax returns. Note that not all states impose personal property tax — applicability varies by state. Recommend reviewing the Company's property locations and confirming filing obligations in each state.");
   }
 
   // ── Unclaimed Property ───────────────────────────────────────────────────
   if (a.unclaimed_property === "no") {
-    add("Unclaimed Property", "Risk of unclaimed property. Include procedural recommendation.");
+    add("Unclaimed Property", "Recommendation: The Company does not appear to have formal processes in place to identify and remit unclaimed property. While this is not a confirmed liability, uncashed checks and unredeemed customer credits may be subject to state escheatment laws after a dormancy period of typically 3 to 5 years. Recommend implementing a process to identify, review, and remit unclaimed property to applicable states on an annual basis.");
   }
 
   // ── Equity deal risks ─────────────────────────────────────────────────────
@@ -112,7 +121,7 @@ function computeRisks(answers) {
     add("Federal Tax", "Risk that audit adjustments will be assessed at the partnership level at the highest tax rate rather than flowing through to individual partners.");
   }
   if (a.pship_aar === "yes") {
-    add("Federal Tax", "Risk of open adjustments from amended returns or AARs that may flow through to the buyer post-closing.");
+    add("Federal Tax", "Risk of open adjustments from amended returns or Administrative Adjustment Requests that may flow through to partners post-closing. Recommend obtaining copies of all filed AARs and amended returns, identifying the nature and amount of any adjustments, and determining whether any amounts remain open or subject to partner-level flow-through after closing.");
   }
   if (a.pship_bba_alloc === "no") {
     add("Federal Tax", "Risk that the buyer may bear the economic burden of pre-closing audit adjustments with no contractual protection.");
@@ -120,7 +129,7 @@ function computeRisks(answers) {
 
   // Common equity questions
   if (a.eq_open_years === "yes") {
-    add("Federal Tax", "Risk of exposure on open tax years. Recommend representations and warranties insurance coverage.");
+    add("Federal Tax", "Risk of exposure on open tax years where federal or state authorities may still assess additional tax. Recommend tax representation and indemnification provisions in the purchase agreement. For larger transactions, representations and warranties insurance may provide additional protection.");
   }
   if (a.eq_notices === "yes") {
     add("Federal Tax", "Risk of unresolved tax positions indicated by outstanding notices. Obtain copies and assess exposure.");
