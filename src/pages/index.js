@@ -11,14 +11,14 @@ export default function Home() {
       {/* Hero */}
       <section className="text-center py-20 sm:py-28 px-5 bg-blue-50 mt-16">
         <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-blue-700 mb-4">
-          Tax Risk Screening At Your Fingertips
+          Identify Tax Risk Before the Deal Closes
         </h2>
         <p className="text-base sm:text-lg max-w-2xl mx-auto text-gray-700 mb-8">
-          Streamline your asset and equity tax risk screening with a guided, automated questionnaire.
+          MergerAid guides you through a structured tax risk screening for asset and equity transactions — so you can flag exposure early and move faster.
         </p>
         <Link href="/pricing">
           <button className="bg-blue-600 text-white px-6 py-3 rounded-xl text-lg hover:bg-blue-700 transition">
-            Get Started
+            Start Screening
           </button>
         </Link>
       </section>
@@ -28,16 +28,16 @@ export default function Home() {
         <h3 className="text-2xl sm:text-3xl font-semibold mb-10 text-blue-700">How It Works</h3>
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           <div>
-            <h4 className="text-xl font-semibold mb-2">Step-by-Step Guidance</h4>
-            <p className="text-gray-600">Answer key questions about your deal and get automated risk insights.</p>
+            <h4 className="text-xl font-semibold mb-2">Structured Screening</h4>
+            <p className="text-gray-600">Answer a guided set of questions covering federal, state, employment, and unclaimed property tax risk — built around how real M&A tax diligence is done.</p>
           </div>
           <div>
-            <h4 className="text-xl font-semibold mb-2">Tailored by Deal Type</h4>
-            <p className="text-gray-600">Asset or equity acquisition? The logic adapts dynamically to your path.</p>
+            <h4 className="text-xl font-semibold mb-2">Instant Risk Summary</h4>
+            <p className="text-gray-600">Get a clear summary of identified risk areas the moment you complete the questionnaire. No waiting, no back and forth.</p>
           </div>
           <div>
-            <h4 className="text-xl font-semibold mb-2">PE-Ready Output</h4>
-            <p className="text-gray-600">Download screening reports to inform your diligence process.</p>
+            <h4 className="text-xl font-semibold mb-2">Downloadable Report</h4>
+            <p className="text-gray-600">Generate a PDF screening report with identified risks and estimated exposure ranges — ready to share with your team or advisor.</p>
           </div>
         </div>
       </section>
