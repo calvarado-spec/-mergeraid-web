@@ -82,7 +82,7 @@ export default function PricingPage() {
           <div className="border border-gray-200 rounded-2xl shadow p-6 flex flex-col justify-between">
             <div>
               <h2 className="text-2xl font-semibold mb-2">Monthly Access</h2>
-              <p className="text-gray-600 mb-4">Unlimited reports and logic access for teams.</p>
+              <p className="text-gray-600 mb-4">Unlimited screenings and reports for teams.</p>
               <p className="text-3xl font-bold mb-4">
                 $9,000<span className="text-lg font-medium text-gray-600">/mo</span>
               </p>

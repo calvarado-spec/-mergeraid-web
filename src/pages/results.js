@@ -66,14 +66,24 @@ export default function Results() {
 
   const { deal, risks } = data;
 
+  const recommendations = risks.filter((r) => r.severity === "recommendation");
+  const activeRisks = risks.filter((r) => r.severity !== "recommendation");
+
   const risksByCategory = {};
-  for (const risk of risks) {
+  for (const risk of activeRisks) {
     if (!risksByCategory[risk.category]) risksByCategory[risk.category] = [];
-    risksByCategory[risk.category].push(risk.text);
+    risksByCategory[risk.category].push(risk);
+  }
+
+  const recsByCategory = {};
+  for (const rec of recommendations) {
+    if (!recsByCategory[rec.category]) recsByCategory[rec.category] = [];
+    recsByCategory[rec.category].push(rec);
   }
 
   const riskyCategories = CATEGORIES.filter((c) => risksByCategory[c]);
-  const cleanCategories = CATEGORIES.filter((c) => !risksByCategory[c]);
+  const recCategories = CATEGORIES.filter((c) => recsByCategory[c] && !risksByCategory[c]);
+  const cleanCategories = CATEGORIES.filter((c) => !risksByCategory[c] && !recsByCategory[c]);
 
   return (
     <Shell>
@@ -120,7 +130,7 @@ export default function Results() {
           </div>
 
           {/* All-clean callout */}
-          {risks.length === 0 && (
+          {activeRisks.length === 0 && recommendations.length === 0 && (
             <div className="text-center py-14">
               <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
                 <svg className="w-7 h-7 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -143,27 +153,59 @@ export default function Results() {
               </h3>
               <div className="space-y-3">
                 {riskyCategories.flatMap((category) =>
-                  risksByCategory[category].map((text, i) => (
-                    <div
-                      key={`${category}-${i}`}
-                      className="border border-amber-200 rounded-xl p-5 bg-amber-50"
-                    >
-                      <span className="inline-block text-xs font-semibold text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full mb-2">
-                        {category}
-                      </span>
-                      <p className="text-gray-700 text-sm leading-relaxed">{text}</p>
-                    </div>
-                  ))
+                  risksByCategory[category].map((risk, i) => {
+                    const severityStyles = {
+                      high: { card: "border-red-200 bg-red-50", badge: "text-red-700 bg-red-100", label: "High" },
+                      moderate: { card: "border-amber-200 bg-amber-50", badge: "text-amber-700 bg-amber-100", label: "Moderate" },
+                      low: { card: "border-blue-200 bg-blue-50", badge: "text-blue-700 bg-blue-100", label: "Low" },
+                    };
+                    const s = severityStyles[risk.severity] || severityStyles.moderate;
+                    return (
+                      <div key={`${category}-${i}`} className={`border rounded-xl p-5 ${s.card}`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full ${s.badge}`}>
+                            {s.label}
+                          </span>
+                          <span className="text-xs text-gray-500">{category}</span>
+                        </div>
+                        <p className="text-gray-700 text-sm leading-relaxed">{risk.text}</p>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
           )}
 
           {/* Exposure callout */}
-          {risks.length > 0 && (
+          {activeRisks.length > 0 && (
             <p className="text-sm text-blue-600 mt-6 mb-2">
               See the full PDF report for estimated dollar exposure ranges.
             </p>
+          )}
+
+          {/* Recommendations section */}
+          {recCategories.length > 0 && (
+            <div className="mb-10 mt-10">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">
+                Recommendations
+              </h3>
+              <div className="space-y-3">
+                {recCategories.flatMap((category) =>
+                  recsByCategory[category].map((rec, i) => (
+                    <div key={`${category}-rec-${i}`} className="border border-gray-200 rounded-xl p-5 bg-gray-50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="inline-block text-xs font-semibold text-gray-600 bg-gray-200 px-2.5 py-0.5 rounded-full">
+                          Recommendation
+                        </span>
+                        <span className="text-xs text-gray-500">{category}</span>
+                      </div>
+                      <p className="text-gray-700 text-sm leading-relaxed">{rec.text}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           )}
 
           {/* Clean categories */}

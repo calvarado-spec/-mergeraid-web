@@ -231,30 +231,36 @@ const QUESTIONS = {
     number: 11,
     text: "Does the Company have employees residing or traveling to states where the Company does not file employment tax returns?",
     outcomes: {
-      yes: { risk: true, next: "contractor_classification", nextNumber: 12 },
-      no:  { next: "contractor_classification", nextNumber: 12 },
+      yes: { risk: true, next: "contractor_usage", nextNumber: 12 },
+      no:  { next: "contractor_usage", nextNumber: 12 },
+    },
+  },
+  contractor_usage: {
+    number: 12,
+    text: "Does the Company engage independent contractors?",
+    outcomes: {
+      yes: { next: "contractor_classification", nextNumber: 13 },
+      no:  { next: "property_tax", nextNumber: 14 },
     },
   },
   contractor_classification: {
-    number: 12,
+    number: 13,
     text: "Does the Company have a process in place to differentiate whether an independent contractor should be considered an employee?",
-    threeWay: true,
     outcomes: {
-      yes: { next: "contractor_count", nextNumber: 12 },
-      no:  { risk: true, next: "property_tax", nextNumber: 13 },
-      na:  { next: "property_tax", nextNumber: 13 },
+      yes: { next: "contractor_count", nextNumber: 13 },
+      no:  { risk: true, next: "contractor_count", nextNumber: 13 },
     },
   },
   property_tax: {
-    number: 13,
+    number: 14,
     text: "Does the Company file real or personal property tax returns in all states where property is located?",
     outcomes: {
-      yes: { next: "unclaimed_property", nextNumber: 14 },
-      no:  { risk: true, next: "unclaimed_property", nextNumber: 14 },
+      yes: { next: "unclaimed_property", nextNumber: 15 },
+      no:  { risk: true, next: "unclaimed_property", nextNumber: 15 },
     },
   },
   unclaimed_property: {
-    number: 14,
+    number: 15,
     text: "Does the Company have processes in place to address any uncashed checks or customer credits?",
     outcomes: {
       yes: { next: "done" },
@@ -278,6 +284,27 @@ const QUESTIONS = {
     number: 0, type: "numeric-input",
     text: "Gross Receipts – Year 3 of Review Period",
     placeholder: "e.g. 5000000",
+    next: "taxable_income_y1", nextNumber: 0,
+  },
+  taxable_income_y1: {
+    number: 0, type: "numeric-input",
+    text: "Taxable Income – Year 1 of Review Period",
+    placeholder: "e.g. 500000",
+    helperNote: "Enter federal taxable income as reported on the Company's tax return. Enter 0 if the Company reported a loss for the year.",
+    next: "taxable_income_y2", nextNumber: 0,
+  },
+  taxable_income_y2: {
+    number: 0, type: "numeric-input",
+    text: "Taxable Income – Year 2 of Review Period",
+    placeholder: "e.g. 500000",
+    helperNote: "Enter federal taxable income as reported on the Company's tax return. Enter 0 if the Company reported a loss for the year.",
+    next: "taxable_income_y3", nextNumber: 0,
+  },
+  taxable_income_y3: {
+    number: 0, type: "numeric-input",
+    text: "Taxable Income – Year 3 of Review Period",
+    placeholder: "e.g. 500000",
+    helperNote: "Enter federal taxable income as reported on the Company's tax return. Enter 0 if the Company reported a loss for the year.",
     next: "erc_claimed", nextNumber: 3,
   },
   erc_amount: {
@@ -287,10 +314,10 @@ const QUESTIONS = {
     next: "tax_exam", nextNumber: 4,
   },
   contractor_count: {
-    number: 12, type: "numeric-input",
+    number: 13, type: "numeric-input",
     text: "Approximate Number of Regular 1099 Contractors",
     placeholder: "e.g. 5",
-    next: "property_tax", nextNumber: 13,
+    next: "property_tax", nextNumber: 14,
   },
 };
 
@@ -391,6 +418,24 @@ const EQUITY_QUESTIONS = {
   gross_receipts_y3: {
     text: "Gross Receipts – Year 3 of Review Period",
     type: "numeric-input", placeholder: "e.g. 5000000",
+    next: "taxable_income_y1",
+  },
+  taxable_income_y1: {
+    text: "Taxable Income – Year 1 of Review Period",
+    type: "numeric-input", placeholder: "e.g. 500000",
+    helperNote: "Enter federal taxable income as reported on the Company's tax return. Enter 0 if the Company reported a loss for the year.",
+    next: "taxable_income_y2",
+  },
+  taxable_income_y2: {
+    text: "Taxable Income – Year 2 of Review Period",
+    type: "numeric-input", placeholder: "e.g. 500000",
+    helperNote: "Enter federal taxable income as reported on the Company's tax return. Enter 0 if the Company reported a loss for the year.",
+    next: "taxable_income_y3",
+  },
+  taxable_income_y3: {
+    text: "Taxable Income – Year 3 of Review Period",
+    type: "numeric-input", placeholder: "e.g. 500000",
+    helperNote: "Enter federal taxable income as reported on the Company's tax return. Enter 0 if the Company reported a loss for the year.",
   },
   officer_comp: {
     text: "Total Combined Officer/Shareholder W-2 Compensation — All Shareholders (most recent year)",
@@ -399,9 +444,9 @@ const EQUITY_QUESTIONS = {
   },
 };
 
-// Total questions per equity entity type (including entity_type question + common 3)
+// Total questions per equity entity type (equity + asset phases combined)
 // Optional questions that extend these: scorp_big_assets (+1), ccorp_nol_amount (+1)
-const EQUITY_BASE_TOTALS = { scorp: 23, ccorp: 21, pship: 22 };
+const EQUITY_BASE_TOTALS = { scorp: 31, ccorp: 28, pship: 29 };
 const EQUITY_FIRST_QUESTION = {
   scorp: "scorp_single_class",
   ccorp: "ccorp_ownership_change",
@@ -425,10 +470,14 @@ const TOOLTIPS = {
   exemption_certs: "Exemption certificates are documents provided by customers claiming they are exempt from sales tax — for example, resellers or exempt organizations. Without valid certificates on file, the seller may be liable for uncollected tax under audit.",
   use_tax_review: "Use tax applies when a company purchases goods or services without paying sales tax — for example, from an out-of-state vendor who did not charge tax. Companies are generally required to self-assess and remit use tax on these purchases.",
   employment_tax_states: "If employees live or work in states where the company does not file employment tax returns, the company may owe payroll taxes, unemployment insurance, and other withholding obligations in those states.",
+  contractor_usage: "Independent contractors are workers paid via Form 1099 rather than W-2 payroll. This includes consultants, freelancers, and outsourced service providers engaged directly by the Company.",
   contractor_classification: "The IRS and states use specific criteria to determine whether a worker is an employee or an independent contractor. Misclassification can result in significant payroll tax liability, penalties, and interest. Factors that generally indicate independent contractor status include: the worker sets their own schedule, works for multiple clients, is not economically dependent on the Company, uses their own tools and equipment, and is engaged for a specific project or defined scope of work. Workers who perform the same functions as employees on a full-time or ongoing basis present higher reclassification risk regardless of how they are classified.",
-  property_tax: "Real and personal property tax returns are required in most states where a company owns or leases property, equipment, or other tangible assets. Failure to file can result in penalties and back taxes.",
+  property_tax: "Personal property tax returns (renditions) are required in many states and localities where a company owns or leases equipment, furniture, or other tangible personal property. Real property is generally assessed directly by the locality without a return filing. Failure to file required renditions can result in estimated assessments, penalties, and back taxes.",
   unclaimed_property: "Unclaimed property laws require companies to report and remit uncashed checks, unused customer credits, and other abandoned property to the state after a dormancy period, typically 3 to 5 years.",
-  entity_type: "The entity type determines how the company is taxed and which specific diligence questions apply. S corporations, C corporations, and partnerships each have distinct tax rules and risk areas.",
+  taxable_income_y1: "Taxable income is the Company's income subject to federal tax as reported on its return (Form 1120, 1120-S, or 1065). This is used to estimate state income tax exposure through apportionment.",
+  taxable_income_y2: "Taxable income is the Company's income subject to federal tax as reported on its return (Form 1120, 1120-S, or 1065). This is used to estimate state income tax exposure through apportionment.",
+  taxable_income_y3: "Taxable income is the Company's income subject to federal tax as reported on its return (Form 1120, 1120-S, or 1065). This is used to estimate state income tax exposure through apportionment.",
+  entity_type: "The entity type determines how the company is taxed and which specific diligence questions apply. S corporations, C corporations, and partnerships each have distinct tax rules and risk areas. Note that an LLC's tax treatment depends on its election — an LLC may be taxed as a partnership, S corporation, C corporation, or disregarded entirely. Select the option matching the target's tax classification, not its legal form.",
   scorp_single_class: "S corporations are only permitted to have one class of stock. A second class of stock — created by differences in distribution rights or liquidation preferences — can invalidate S corp status retroactively.",
   scorp_shareholder_count: "S corporations may not have more than 100 shareholders. Exceeding this limit at any point could invalidate the S corp election and result in the company being treated as a C corporation.",
   scorp_eligible_shareholders: "S corporations may only have eligible shareholders: US citizens or resident individuals, certain trusts, and estates. Non-resident aliens, corporations, and certain other entities are not eligible and their ownership could terminate S corp status.",
@@ -516,9 +565,12 @@ export default function Questionnaire() {
   const isEquity = dealType === "equity";
   const isDone = view === "done";
   const progressNum = (isAsset || equityInAssetPhase) ? questionNumber : equityQuestionNum;
-  const progressTotal = isAsset ? 14 : equityTotal;
+  const progressTotal = isAsset ? 15 : equityTotal;
   const progress = progressTotal ? Math.max(0, Math.round(((progressNum - 1) / progressTotal) * 100)) : 0;
-  const GROSS_RECEIPTS_IDS = new Set(["gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3"]);
+  const GROSS_RECEIPTS_IDS = new Set([
+    "gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3",
+    "taxable_income_y1", "taxable_income_y2", "taxable_income_y3",
+  ]);
   const showProgressBar = !isDone && !loadingDeal && dealType && (
     (isAsset || equityInAssetPhase) ? !GROSS_RECEIPTS_IDS.has(questionId) : true
   );
@@ -787,7 +839,7 @@ export default function Questionnaire() {
       setNumericInputValue("");
       const isLastFinancial =
         equityQuestionId === "officer_comp" ||
-        (equityQuestionId === "gross_receipts_y3" && equityEntityType !== "scorp");
+        (equityQuestionId === "taxable_income_y3" && equityEntityType !== "scorp");
       if (isLastFinancial) {
         // Transition to asset phase
         setEquityOffset(equityQuestionNum);
@@ -795,7 +847,7 @@ export default function Questionnaire() {
         setView("question");
         setQuestionId("prior_reorg");
         setQuestionNumber(equityQuestionNum + 1);
-      } else if (equityQuestionId === "gross_receipts_y3" && equityEntityType === "scorp") {
+      } else if (equityQuestionId === "taxable_income_y3" && equityEntityType === "scorp") {
         setEquityQuestionId("officer_comp");
         setEquityQuestionNum((prev) => prev + 1);
         setEquityView("numeric-input");
@@ -915,12 +967,15 @@ export default function Questionnaire() {
                       value={numericInputValue}
                       onChange={(e) => setNumericInputValue(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleAssetNumericSubmit(); }}
-                      className="w-full border border-blue-200 rounded-lg px-4 py-2 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-6"
+                      className="w-full border border-blue-200 rounded-lg px-4 py-2 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-2"
                     />
+                    {currentAssetQ.helperNote && (
+                      <p className="text-xs text-gray-400 mt-1 mb-4">{currentAssetQ.helperNote}</p>
+                    )}
                     <button
                       onClick={handleAssetNumericSubmit}
                       disabled={submitting || !dealId}
-                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold py-3 rounded-lg transition-colors"
+                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold py-3 rounded-lg transition-colors mt-4"
                     >
                       {submitting ? "Saving…" : "Continue →"}
                     </button>
@@ -1157,7 +1212,7 @@ export default function Questionnaire() {
                   {[
                     { value: "scorp", label: "S Corporation" },
                     { value: "ccorp", label: "C Corporation" },
-                    { value: "pship", label: "Partnership / LLC" },
+                    { value: "pship", label: "Partnership (incl. LLCs taxed as partnerships)" },
                   ].map(({ value, label }) => (
                     <button
                       key={value}

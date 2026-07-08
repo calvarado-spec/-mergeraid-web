@@ -10,7 +10,7 @@ const CATEGORY_META = {
     general:
       "Federal income tax compliance involves adherence to U.S. Internal Revenue Code requirements, including accurate reporting of income, deductions, and credits, and timely filing of all applicable returns. In the context of an acquisition, federal tax risk encompasses exposure from open audit years, pending examinations, uncertain tax positions, and entity-level elections and qualifications.",
     recommendation:
-      "Recommend obtaining copies of federal income tax returns for the prior three to five years, all IRS correspondence, and audit reports. Obtain representations from the target regarding open tax years and any potential adjustments. Consider representations and warranties insurance coverage for material exposures identified herein.",
+      "Recommend obtaining copies of federal income tax returns for the prior three to five years, all IRS correspondence, and audit reports. Obtain representations from the target regarding open tax years and any potential adjustments. Recommend tax representation and indemnification provisions in the purchase agreement for material exposures identified herein. For larger transactions, representations and warranties insurance may provide additional protection.",
   },
   "State Income Tax": {
     general:
@@ -55,6 +55,17 @@ const CATEGORIES_ORDER = [
 
 function fmtExp(n) {
   return "$" + Math.round(n).toLocaleString("en-US");
+}
+
+function severityBadge(severity) {
+  const map = {
+    high: { cls: "badge-high", label: "High" },
+    moderate: { cls: "badge-moderate", label: "Moderate" },
+    low: { cls: "badge-low", label: "Low" },
+    recommendation: { cls: "badge-recommendation", label: "Recommendation" },
+  };
+  const s = map[severity] || map.moderate;
+  return <span className={s.cls}>{s.label}</span>;
 }
 
 function fmtCurrency(n) {
@@ -211,6 +222,50 @@ const STYLES = `
     border-radius: 4px;
     white-space: nowrap;
   }
+  .badge-high {
+    display: inline-block;
+    background: #fde8e8;
+    color: #b91c1c;
+    border: 1px solid #f5a5a5;
+    font-size: 8.5pt;
+    font-weight: bold;
+    padding: 2px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .badge-moderate {
+    display: inline-block;
+    background: #fef3e2;
+    color: #c47a2a;
+    border: 1px solid #f0c07a;
+    font-size: 8.5pt;
+    font-weight: bold;
+    padding: 2px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .badge-low {
+    display: inline-block;
+    background: #dbeafe;
+    color: #1d4ed8;
+    border: 1px solid #93c5fd;
+    font-size: 8.5pt;
+    font-weight: bold;
+    padding: 2px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .badge-recommendation {
+    display: inline-block;
+    background: #f3f4f6;
+    color: #6b7280;
+    border: 1px solid #d1d5db;
+    font-size: 8.5pt;
+    font-weight: bold;
+    padding: 2px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
   .badge-clean {
     display: inline-block;
     background: #e8f5e9;
@@ -360,16 +415,27 @@ export default function ReportPage() {
     );
   }
 
-  const { deal, risks, answers, stateSales } = data;
-  const exposures = calculateExposures(answers || [], stateSales || []);
+  const { deal, risks, answers, stateSales, incomeTaxSales } = data;
+  const exposures = calculateExposures(answers || [], stateSales || [], incomeTaxSales || []);
+
+  const recommendations = risks.filter((r) => r.severity === "recommendation");
+  const activeRisks = risks.filter((r) => r.severity !== "recommendation");
 
   const risksByCategory = {};
-  for (const risk of risks) {
+  for (const risk of activeRisks) {
     if (!risksByCategory[risk.category]) risksByCategory[risk.category] = [];
-    risksByCategory[risk.category].push(risk.text);
+    risksByCategory[risk.category].push(risk);
   }
+
+  const recsByCategory = {};
+  for (const rec of recommendations) {
+    if (!recsByCategory[rec.category]) recsByCategory[rec.category] = [];
+    recsByCategory[rec.category].push(rec);
+  }
+
   const riskyCategories = CATEGORIES_ORDER.filter((c) => risksByCategory[c]);
-  const cleanCategories = CATEGORIES_ORDER.filter((c) => !risksByCategory[c]);
+  const recCategories = CATEGORIES_ORDER.filter((c) => recsByCategory[c] && !risksByCategory[c]);
+  const cleanCategories = CATEGORIES_ORDER.filter((c) => !risksByCategory[c] && !recsByCategory[c]);
 
   const dealTitle = deal.deal_name || deal.target_name;
   const dealTypeLabel = deal.deal_type === "asset" ? "Asset Acquisition" : "Equity Purchase";
@@ -439,7 +505,7 @@ export default function ReportPage() {
 
           <hr className="cover-rule" />
           <h1 className="cover-title">{dealTitle}</h1>
-          <p className="cover-subtitle">Tax Due Diligence Risk Screening Report</p>
+          <p className="cover-subtitle">Tax Risk Screening Report</p>
           <hr className="cover-rule" />
 
           <div className="cover-meta">
@@ -471,11 +537,11 @@ export default function ReportPage() {
 
           <p className="sub-heading">Nature of Services</p>
           <p className="body-para">
-            MergerAid has performed certain automated tax due diligence screening services in connection
-            with the proposed acquisition of {deal.target_name} by {deal.client_name}. This screening is
+            This screening was generated by MergerAid in connection with
+            the proposed acquisition of {deal.target_name} by {deal.client_name}. This screening is
             based solely on representations provided by the user and does not reflect a review of tax
-            returns, financial statements, workpapers, or supporting documentation. The procedures
-            performed were limited to a structured questionnaire covering key federal, state, sales and
+            returns, financial statements, workpapers, or supporting documentation. The screening
+            was limited to a structured questionnaire covering key federal, state, sales and
             use tax, employment tax, property tax, and unclaimed property risk areas.
           </p>
 
@@ -501,7 +567,7 @@ export default function ReportPage() {
         <div className="report-section">
           <h2 className="section-heading">Risk Summary</h2>
 
-          {risks.length > 0 ? (
+          {activeRisks.length > 0 ? (
             <table className="data-table">
               <thead>
                 <tr>
@@ -511,10 +577,10 @@ export default function ReportPage() {
                 </tr>
               </thead>
               <tbody>
-                {risks.map((r, i) => (
+                {activeRisks.map((r, i) => (
                   <tr key={i}>
                     <td className="td">{r.category}</td>
-                    <td className="td"><span className="badge-risk">Elevated</span></td>
+                    <td className="td">{severityBadge(r.severity)}</td>
                     <td className="td">{r.text}</td>
                   </tr>
                 ))}
@@ -524,6 +590,30 @@ export default function ReportPage() {
             <p className="body-para" style={{ color: "#2e7d32", fontWeight: "bold" }}>
               No elevated risks were identified based on the information provided.
             </p>
+          )}
+
+          {recommendations.length > 0 && (
+            <>
+              <h3 className="clean-section-heading" style={{ color: "#555" }}>Recommendations</h3>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th className="th" style={{ width: "20%" }}>Area</th>
+                    <th className="th" style={{ width: "16%" }}>Type</th>
+                    <th className="th">Recommendation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recommendations.map((r, i) => (
+                    <tr key={i}>
+                      <td className="td">{r.category}</td>
+                      <td className="td">{severityBadge(r.severity)}</td>
+                      <td className="td">{r.text}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
 
           {cleanCategories.length > 0 && (
@@ -595,7 +685,7 @@ export default function ReportPage() {
         })()}
 
         {/* PAGE 4+ — DETAILED FINDINGS */}
-        {riskyCategories.length > 0 && (
+        {(riskyCategories.length > 0 || recCategories.length > 0) && (
           <div className="report-section">
             <h2 className="section-heading">Detailed Findings</h2>
 
@@ -609,14 +699,33 @@ export default function ReportPage() {
                   <p className="body-para">{meta.general}</p>
 
                   <p className="label-bold">Finding</p>
-                  {risksByCategory[cat].map((text, i) => (
+                  {risksByCategory[cat].map((risk, i) => (
                     <p key={i} className="finding-item">
-                      <span className="finding-num">{i + 1}.</span>{" "}{text}
+                      <span className="finding-num">{i + 1}.</span>{" "}{risk.text}
                     </p>
                   ))}
 
                   <p className="label-bold">Recommendation</p>
                   <p className="body-para italic-para">{meta.recommendation}</p>
+                </div>
+              );
+            })}
+
+            {recCategories.map((cat) => {
+              const meta = CATEGORY_META[cat];
+              return (
+                <div key={`rec-${cat}`} className="section-block">
+                  <h3 className="cat-heading">{cat}</h3>
+
+                  <p className="label-bold">General</p>
+                  <p className="body-para">{meta.general}</p>
+
+                  <p className="label-bold">Recommendation</p>
+                  {recsByCategory[cat].map((rec, i) => (
+                    <p key={i} className="finding-item">
+                      <span className="finding-num">{i + 1}.</span>{" "}{rec.text}
+                    </p>
+                  ))}
                 </div>
               );
             })}

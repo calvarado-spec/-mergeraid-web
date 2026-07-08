@@ -10,7 +10,7 @@ export default function Footer() {
             <Image src="/images/mergeraid-logo.png" alt="MergerAid Logo" width={24} height={24} />
             <h4 className="font-semibold text-blue-700">MergerAid</h4>
           </div>
-          <p>Automating M&A tax diligence for modern dealmakers.</p>
+          <p>Tax risk screening for modern dealmakers.</p>
         </div>
         <div>
           <h4 className="font-semibold mb-2">Company</h4>

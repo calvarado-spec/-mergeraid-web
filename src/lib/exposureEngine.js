@@ -8,7 +8,9 @@ function fmt(n) {
   return "$" + Math.round(n).toLocaleString("en-US");
 }
 
-export function calculateExposures(answers, stateSales) {
+// stateSales    — all state_sales rows (used for Sales & Use Tax, Calc 1)
+// incomeTaxSales — rows where question_id = 'income_tax_nexus' (used for State Income Tax, Calc 5)
+export function calculateExposures(answers, stateSales, incomeTaxSales) {
   const a = {};
   for (const row of answers) a[row.question_id] = row.answer;
 
@@ -40,7 +42,7 @@ export function calculateExposures(answers, stateSales) {
         description: "Potential IRS recapture of Employee Retention Credits claimed",
         lowEstimate: erc * 0.10,
         highEstimate: erc * 0.30,
-        basis: "10%–30% of total ERC claimed (IRS audit adjustment range)",
+        basis: "Assumes partial disallowance of 10% to 30% of total credits claimed. Full disallowance is possible where eligibility is not supportable.",
       });
     }
   }
@@ -66,7 +68,7 @@ export function calculateExposures(answers, stateSales) {
   }
 
   // ── 4. Contractor Misclassification ────────────────────────────────────────
-  if (a.contractor_classification === "yes") {
+  if (a.contractor_usage === "yes" && a.contractor_classification === "no") {
     const count = parseNum(a.contractor_count);
     if (count !== null && count > 0) {
       exposures.push({
@@ -79,21 +81,65 @@ export function calculateExposures(answers, stateSales) {
     }
   }
 
-  // ── 5. State Income Tax Nexus ───────────────────────────────────────────────
+  // ── 5. State Income Tax Nexus — apportionment-based ────────────────────────
   if (a.income_tax_nexus === "yes") {
-    const y1 = parseNum(a.gross_receipts_y1);
-    const y2 = parseNum(a.gross_receipts_y2);
-    const y3 = parseNum(a.gross_receipts_y3);
-    const provided = [y1, y2, y3].filter((v) => v !== null);
-    if (provided.length > 0) {
-      const avgReceipts = provided.reduce((s, v) => s + v, 0) / provided.length;
-      exposures.push({
-        category: "State Income Tax",
-        description: "Estimated state income tax exposure in states where the company has nexus but has not filed returns",
-        lowEstimate: avgReceipts * 0.02 * 0.05,
-        highEstimate: avgReceipts * 0.04 * 0.09,
-        basis: "Avg receipts × 2%–4% apportioned income rate × 5%–9% blended state tax rate",
-      });
+    const itSales = incomeTaxSales || [];
+    const y1GR = parseNum(a.gross_receipts_y1);
+    const y2GR = parseNum(a.gross_receipts_y2);
+    const y3GR = parseNum(a.gross_receipts_y3);
+    const y1TI = parseNum(a.taxable_income_y1);
+    const y2TI = parseNum(a.taxable_income_y2);
+    const y3TI = parseNum(a.taxable_income_y3);
+
+    const hasTaxableIncome = y1TI !== null || y2TI !== null || y3TI !== null;
+
+    // Sum state sales by year across all income_tax_nexus states
+    let itSalesY1 = 0, itSalesY2 = 0, itSalesY3 = 0;
+    for (const row of itSales) {
+      itSalesY1 += parseNum(row.year_1) || 0;
+      itSalesY2 += parseNum(row.year_2) || 0;
+      itSalesY3 += parseNum(row.year_3) || 0;
+    }
+
+    if (hasTaxableIncome) {
+      // Real apportionment: attribute income to non-filing states via sales factor
+      let totalAttrIncome = 0;
+      let yearsUsed = 0;
+
+      const applyYear = (stateSales, grossReceipts, taxableIncome) => {
+        if (stateSales <= 0 || grossReceipts == null || grossReceipts <= 0 || taxableIncome == null) return;
+        const factor = Math.min(1, stateSales / grossReceipts);
+        const attributed = factor * Math.max(0, taxableIncome);
+        totalAttrIncome += attributed;
+        yearsUsed++;
+      };
+
+      applyYear(itSalesY1, y1GR, y1TI);
+      applyYear(itSalesY2, y2GR, y2TI);
+      applyYear(itSalesY3, y3GR, y3TI);
+
+      if (yearsUsed > 0 && totalAttrIncome > 0) {
+        exposures.push({
+          category: "State Income Tax",
+          description: "Estimated state income tax exposure in states where the company has nexus but has not filed returns",
+          lowEstimate: totalAttrIncome * 0.05,
+          highEstimate: totalAttrIncome * 0.09,
+          basis: "Apportions reported taxable income to non-filing states using a sales factor (reported state sales over total gross receipts) and applies a blended state rate of 5% to 9%. Estimates reflect net income-based taxes only and exclude gross receipts taxes, franchise taxes, and minimum taxes imposed by certain states.",
+        });
+      }
+    } else {
+      // Fallback: use total state sales × assumed 7.5% pre-tax margin
+      const totalItSales = itSalesY1 + itSalesY2 + itSalesY3;
+      if (totalItSales > 0) {
+        const assumedIncome = totalItSales * 0.075;
+        exposures.push({
+          category: "State Income Tax",
+          description: "Estimated state income tax exposure in states where the company has nexus but has not filed returns",
+          lowEstimate: assumedIncome * 0.05,
+          highEstimate: assumedIncome * 0.09,
+          basis: "Apportions reported taxable income to non-filing states using a sales factor (reported state sales over total gross receipts) and applies a blended state rate of 5% to 9%. Estimates reflect net income-based taxes only and exclude gross receipts taxes, franchise taxes, and minimum taxes imposed by certain states. Taxable income was not provided; a 7.5% assumed pre-tax margin was applied to reported state sales.",
+        });
+      }
     }
   }
 

@@ -11,10 +11,11 @@ const VALID_QUESTION_IDS = new Set([
   "income_tax_nexus", "physical_nexus",
   "taxable_sales", "sales_tax_nexus",
   "exemption_certs", "use_tax_review",
-  "employment_tax_states", "contractor_classification",
+  "employment_tax_states", "contractor_usage", "contractor_classification",
   "property_tax", "unclaimed_property",
   // financial input questions
   "gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3",
+  "taxable_income_y1", "taxable_income_y2", "taxable_income_y3",
   "officer_comp", "erc_amount", "contractor_count",
   // equity questions
   "entity_type",
@@ -25,10 +26,11 @@ const VALID_QUESTION_IDS = new Set([
   "eq_open_years", "eq_notices", "eq_utp",
 ]);
 const VALID_ANSWERS = new Set(["yes", "no", "na", "scorp", "ccorp", "pship"]);
-// ccorp_nol_amount accepts a free-form dollar string; skip the enum check for it
+// free-form questions accept any non-empty string; skip the enum check for them
 const FREE_FORM_QUESTIONS = new Set([
   "ccorp_nol_amount",
   "gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3",
+  "taxable_income_y1", "taxable_income_y2", "taxable_income_y3",
   "officer_comp", "erc_amount", "contractor_count",
 ]);
 
