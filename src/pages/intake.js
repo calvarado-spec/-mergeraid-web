@@ -27,7 +27,7 @@ export default function Intake() {
       })
       .then((data) => {
         if (!data) return;
-        if (data.user?.subscription_status !== "active") {
+        if (!data.user || (data.user.report_credits ?? 0) <= 0) {
           router.push("/pricing");
         }
       })

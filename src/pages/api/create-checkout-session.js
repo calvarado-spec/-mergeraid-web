@@ -7,9 +7,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { priceId, userId, email } = req.body;
+  const { userId, email } = req.body;
 
-  if (!priceId || !userId) {
+  if (!userId) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -21,8 +21,8 @@ export default async function handler(req, res) {
           financial_connections: { permissions: ['payment_method'] },
         },
       },
-      line_items: [{ price: priceId, quantity: 1 }],
-      mode: priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_SINGLE ? 'payment' : 'subscription',
+      line_items: [{ price: process.env.NEXT_PUBLIC_STRIPE_PRICE_SINGLE, quantity: 1 }],
+      mode: 'payment',
       success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/dashboard?payment=success`,
       cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/pricing?payment=cancelled`,
       customer_email: email,

@@ -53,11 +53,19 @@ export default function Dashboard() {
               <h1 className="text-xl sm:text-2xl font-bold text-blue-700">Dashboard</h1>
               <p className="text-gray-500 text-xs sm:text-sm mt-0.5 truncate">Welcome back, {user?.email}</p>
             </div>
-            <Link href="/intake" className="flex-shrink-0">
-              <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg transition-colors text-sm sm:text-base">
-                + New Screening
-              </button>
-            </Link>
+            <div className="flex-shrink-0 flex flex-col items-end gap-1">
+              <p className="text-xs text-gray-500">
+                Reports remaining:{" "}
+                <span className={(user?.report_credits ?? 0) > 0 ? "font-semibold text-blue-700" : "font-semibold text-gray-400"}>
+                  {user?.report_credits ?? 0}
+                </span>
+              </p>
+              <Link href={(user?.report_credits ?? 0) > 0 ? "/intake" : "/pricing"}>
+                <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg transition-colors text-sm sm:text-base">
+                  + New Screening
+                </button>
+              </Link>
+            </div>
           </div>
 
           {/* Empty state */}

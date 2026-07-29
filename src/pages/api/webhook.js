@@ -1,4 +1,8 @@
-// Stripe webhook handler
+// SQL MIGRATION — run manually in Supabase before deploying:
+//
+//   ALTER TABLE users ADD COLUMN report_credits INTEGER NOT NULL DEFAULT 0;
+//
+
 import Stripe from "stripe";
 import { Pool } from "pg";
 
@@ -17,13 +21,6 @@ function getRawBody(req) {
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
-}
-
-function getPlanType(priceId) {
-  if (priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_SINGLE) return "single";
-  if (priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY) return "monthly";
-  if (priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_ANNUAL) return "annual";
-  return null;
 }
 
 export default async function handler(req, res) {
@@ -46,23 +43,14 @@ export default async function handler(req, res) {
 
   try {
     // ── checkout.session.completed ────────────────────────────────────────────
-    // Fired when a Stripe Checkout session finishes (both one-time and subscription)
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
-      const customerId = session.customer;
       const userId = session.metadata?.userId;
 
       if (!userId) {
         console.warn("checkout.session.completed missing userId in metadata");
         return res.status(200).json({ received: true });
       }
-
-      // Expand line items to resolve the price ID
-      const full = await stripe.checkout.sessions.retrieve(session.id, {
-        expand: ["line_items"],
-      });
-      const priceId = full.line_items?.data[0]?.price?.id ?? null;
-      const planType = getPlanType(priceId);
 
       // One-time payment sessions may not attach a customer — create one so we
       // always have a stripe_customer_id to store.
@@ -79,28 +67,11 @@ export default async function handler(req, res) {
 
       await pool.query(
         `UPDATE users
-         SET subscription_status    = 'active',
-             plan_type              = $1,
-             stripe_customer_id     = $2,
+         SET report_credits          = report_credits + 1,
+             stripe_customer_id      = $1,
              subscription_updated_at = NOW()
-         WHERE id = $3::uuid`,
-        [planType, resolvedCustomerId, userId]
-      );
-    }
-
-    // ── customer.subscription.deleted ─────────────────────────────────────────
-    // Fired when a subscription is cancelled or expires
-    if (event.type === "customer.subscription.deleted") {
-      const subscription = event.data.object;
-      const customerId = subscription.customer;
-
-      await pool.query(
-        `UPDATE users
-         SET subscription_status    = 'inactive',
-             plan_type              = NULL,
-             subscription_updated_at = NOW()
-         WHERE stripe_customer_id = $1`,
-        [customerId]
+         WHERE id = $2::uuid`,
+        [resolvedCustomerId, userId]
       );
     }
 

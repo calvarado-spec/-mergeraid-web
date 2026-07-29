@@ -41,8 +41,24 @@ export default async function handler(req, res) {
 
   const userId = getUserFromRequest(req);
 
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query("BEGIN");
+
+    // Atomically consume one credit — fails silently if none remain
+    const decr = await client.query(
+      "UPDATE users SET report_credits = report_credits - 1 WHERE id = $1::uuid AND report_credits > 0",
+      [userId]
+    );
+
+    if (decr.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(402).json({
+        error: "No report credits remaining. Please purchase a report to continue.",
+      });
+    }
+
+    const result = await client.query(
       `INSERT INTO deals (client_name, target_name, deal_name, deal_type, agreed_to_terms, user_id, created_at)
        VALUES ($1, $2, $3, $4, $5, $6::uuid, NOW())
        RETURNING id`,
@@ -52,13 +68,17 @@ export default async function handler(req, res) {
         dealName?.trim() || null,
         dealType,
         true,
-        userId ?? null,
+        userId,
       ]
     );
 
+    await client.query("COMMIT");
     return res.status(201).json({ dealId: result.rows[0].id });
   } catch (err) {
+    await client.query("ROLLBACK");
     console.error("DB error:", err.message);
     return res.status(500).json({ error: err.message ?? "Database error" });
+  } finally {
+    client.release();
   }
 }
