@@ -38,6 +38,9 @@ export default function Home() {
           <div>
             <h4 className="text-xl font-semibold mb-2">Downloadable Report</h4>
             <p className="text-gray-600">Generate a PDF screening report with identified risks and estimated exposure ranges — ready to share with your team or advisor.</p>
+            <a href="/sample-report" target="_blank" rel="noopener noreferrer" className="inline-block mt-3 text-blue-600 hover:text-blue-800 text-sm font-medium">
+              View a sample report →
+            </a>
           </div>
         </div>
       </section>
