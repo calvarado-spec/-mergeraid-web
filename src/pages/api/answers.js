@@ -55,6 +55,17 @@ export default async function handler(req, res) {
   }
 
   try {
+    const dealCheck = await pool.query(
+      "SELECT is_complete FROM deals WHERE id = $1",
+      [dealId]
+    );
+    if (dealCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Deal not found" });
+    }
+    if (dealCheck.rows[0].is_complete) {
+      return res.status(403).json({ error: "This screening has already been completed and cannot be modified." });
+    }
+
     await pool.query(
       `INSERT INTO answers (deal_id, question_id, answer, created_at)
        VALUES ($1, $2, $3, NOW())`,

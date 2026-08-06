@@ -109,11 +109,13 @@ export default function Dashboard() {
                       <span>{formatDate(deal.created_at)}</span>
                     </div>
                     <div className="flex gap-2">
-                      <Link href={`/questionnaire?dealId=${deal.id}`}>
-                        <button className="text-xs font-medium text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg hover:border-blue-400 transition-colors">
-                          Resume
-                        </button>
-                      </Link>
+                      {!deal.is_complete && (
+                        <Link href={`/questionnaire?dealId=${deal.id}`}>
+                          <button className="text-xs font-medium text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg hover:border-blue-400 transition-colors">
+                            Resume
+                          </button>
+                        </Link>
+                      )}
                       {deal.is_complete && (
                         <Link href={`/results?dealId=${deal.id}`}>
                           <button className="text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg transition-colors">
@@ -163,11 +165,13 @@ export default function Dashboard() {
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex gap-2">
-                            <Link href={`/questionnaire?dealId=${deal.id}`}>
-                              <button className="text-xs font-medium text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 px-3 py-1.5 rounded-lg transition-colors">
-                                Resume
-                              </button>
-                            </Link>
+                            {!deal.is_complete && (
+                              <Link href={`/questionnaire?dealId=${deal.id}`}>
+                                <button className="text-xs font-medium text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 px-3 py-1.5 rounded-lg transition-colors">
+                                  Resume
+                                </button>
+                              </Link>
+                            )}
                             {deal.is_complete && (
                               <Link href={`/results?dealId=${deal.id}`}>
                                 <button className="text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg transition-colors">
