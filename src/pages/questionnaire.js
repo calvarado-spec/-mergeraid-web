@@ -499,57 +499,70 @@ const TOOLTIPS = {
 
 // ── Resume-state computation ──────────────────────────────────────────────────
 // These pure functions replay the branching flow using saved answers and return
-// the state object needed to resume at the first unanswered question.
+// { finalState, history } where history is the stack of prior state snapshots
+// needed to power the Back button.
 
-function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum) {
+// Full state snapshot — every flow field needed to restore a view.
+function blankSnap(overrides) {
+  return {
+    view: "question", questionId: "prior_reorg", questionNumber: 1,
+    stateSelectContext: null, selectedStates: [], stateSalesData: {},
+    equityInAssetPhase: false, equityOffset: 0,
+    equityView: "entity-select", equityQuestionId: null,
+    equityQuestionNum: 1, equityTotal: null, equityEntityType: null,
+    ...overrides,
+  };
+}
+
+function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields) {
+  const history = [];
   let qId = "prior_reorg";
   let qNum = startQNum;
 
+  function snap(overrides) {
+    return blankSnap({
+      view: "question", questionId: qId, questionNumber: equityOffset + qNum,
+      stateSelectContext: null, selectedStates: [], stateSalesData: {},
+      equityInAssetPhase: inEquityAssetPhase, equityOffset,
+      equityView: inEquityAssetPhase ? "question" : "entity-select",
+      ...extraFields,
+      ...overrides,
+    });
+  }
+
   for (let guard = 0; guard < 60; guard++) {
     const q = QUESTIONS[qId];
-    if (!q) return { view: "done" };
+    if (!q) return { finalState: blankSnap({ view: "done" }), history };
+    if (a[qId] === undefined) return { finalState: snap(), history };
 
-    if (a[qId] === undefined) {
-      return {
-        view: "question",
-        questionId: qId,
-        questionNumber: equityOffset + qNum,
-        equityInAssetPhase: inEquityAssetPhase,
-        equityOffset,
-      };
-    }
-
+    history.push(snap());
     const ans = a[qId];
 
     if (q.type === "numeric-input") {
-      if (!q.next || q.next === "done") return { view: "done" };
+      if (!q.next || q.next === "done") return { finalState: blankSnap({ view: "done" }), history };
       qId = q.next;
       qNum = q.nextNumber !== undefined ? q.nextNumber : qNum;
       continue;
     }
 
     const outcome = q.outcomes?.[ans];
-    if (!outcome) return { view: "done" };
+    if (!outcome) return { finalState: blankSnap({ view: "done" }), history };
 
     if (outcome.stateSelect) {
       const { next: nextId, nextNumber: nextNum } = outcome;
-      // If the question after state-select is already answered, state-select was completed
+      const stateCtx = { questionId: qId, nextId, nextNumber: nextNum };
       if (nextId !== "done" && a[nextId] !== undefined) {
+        // State-select was completed; push the yes/no question only — not the
+        // sub-steps, since we don't have the saved selections to restore them.
+        // (Going Back from the next question will return to this yes/no view.)
         qId = nextId;
         qNum = nextNum;
         continue;
       }
-      return {
-        view: "state-select",
-        questionId: qId,
-        questionNumber: equityOffset + qNum,
-        stateSelectContext: { questionId: qId, nextId, nextNumber: nextNum },
-        equityInAssetPhase: inEquityAssetPhase,
-        equityOffset,
-      };
+      return { finalState: snap({ view: "state-select", stateSelectContext: stateCtx }), history };
     }
 
-    if (outcome.next === "done") return { view: "done" };
+    if (outcome.next === "done") return { finalState: blankSnap({ view: "done" }), history };
 
     let nextId = outcome.next;
     let nextNum = outcome.nextNumber;
@@ -565,48 +578,60 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum) {
     qNum = nextNum;
   }
 
-  return { view: "done" };
+  return { finalState: blankSnap({ view: "done" }), history };
 }
 
 function resumeEquity(a) {
   const entityType = a["entity_type"];
-  if (!entityType) {
-    return { equityView: "entity-select" };
-  }
+  const entitySelectSnap = blankSnap();
 
+  if (!entityType) return { finalState: entitySelectSnap, history: [] };
+
+  // entity-select is the first "prior" state for the first equity question
+  const history = [entitySelectSnap];
   let equityTotal = EQUITY_BASE_TOTALS[entityType];
   let equityQuestionId = EQUITY_FIRST_QUESTION[entityType];
   let equityQuestionNum = 2;
+
+  function equitySnap(overrides) {
+    return blankSnap({
+      equityView: "question", equityQuestionId, equityQuestionNum,
+      equityTotal, equityEntityType: entityType,
+      ...overrides,
+    });
+  }
 
   for (let guard = 0; guard < 60; guard++) {
     const q = EQUITY_QUESTIONS[equityQuestionId];
     if (!q) break;
 
+    const equityView = q.type === "numeric-input" ? "numeric-input" :
+                       q.type === "text-input"    ? "text-input"    : "question";
+
     if (a[equityQuestionId] === undefined) {
-      const equityView =
-        q.type === "numeric-input" ? "numeric-input" :
-        q.type === "text-input"    ? "text-input"    : "question";
-      return { equityView, equityQuestionId, equityQuestionNum, equityTotal, equityEntityType: entityType };
+      return { finalState: equitySnap({ equityView }), history };
     }
 
+    history.push(equitySnap({ equityView }));
     const ans = a[equityQuestionId];
 
-    // Track optional-question total extensions
     if (equityQuestionId === "scorp_converted_from_c" && ans === "yes") equityTotal += 1;
     if (equityQuestionId === "ccorp_nol" && ans === "yes") equityTotal += 1;
 
-    // Detect transition into asset phase
     const isLastFinancial =
       equityQuestionId === "officer_comp" ||
       (equityQuestionId === "taxable_income_y3" && entityType !== "scorp");
 
     if (isLastFinancial) {
       const equityOffset = equityQuestionNum;
-      const assetState = resumeAsset(a, true, equityOffset, equityQuestionNum + 1);
-      return { ...assetState, equityTotal, equityEntityType: entityType, equityOffset, equityInAssetPhase: true };
+      const extra = { equityView: "question", equityQuestionId, equityQuestionNum, equityTotal, equityEntityType: entityType };
+      const { finalState, history: ah } = resumeAsset(a, true, equityOffset, equityQuestionNum + 1, extra);
+      return {
+        finalState: { ...finalState, equityTotal, equityEntityType: entityType, equityOffset, equityInAssetPhase: true },
+        history: [...history, ...ah],
+      };
     }
 
-    // scorp: taxable_income_y3 → officer_comp (still in equity numeric phase)
     if (equityQuestionId === "taxable_income_y3" && entityType === "scorp") {
       equityQuestionId = "officer_comp";
       equityQuestionNum += 1;
@@ -616,23 +641,26 @@ function resumeEquity(a) {
     const nextId = ans === "yes" ? (q.yesNext ?? q.next) : (q.noNext ?? q.next);
 
     if (!nextId || !EQUITY_QUESTIONS[nextId]) {
-      // No more equity questions — transition to asset phase
       const equityOffset = equityQuestionNum;
-      const assetState = resumeAsset(a, true, equityOffset, equityQuestionNum + 1);
-      return { ...assetState, equityTotal, equityEntityType: entityType, equityOffset, equityInAssetPhase: true };
+      const extra = { equityView: "question", equityQuestionId, equityQuestionNum, equityTotal, equityEntityType: entityType };
+      const { finalState, history: ah } = resumeAsset(a, true, equityOffset, equityQuestionNum + 1, extra);
+      return {
+        finalState: { ...finalState, equityTotal, equityEntityType: entityType, equityOffset, equityInAssetPhase: true },
+        history: [...history, ...ah],
+      };
     }
 
     equityQuestionId = nextId;
     equityQuestionNum += 1;
   }
 
-  return { equityView: "entity-select" };
+  return { finalState: entitySelectSnap, history: [] };
 }
 
 function computeResumeState(dealType, savedAnswers) {
   const a = {};
   for (const row of savedAnswers) a[row.question_id] = row.answer;
-  return dealType === "asset" ? resumeAsset(a, false, 0, 1) : resumeEquity(a);
+  return dealType === "asset" ? resumeAsset(a, false, 0, 1, {}) : resumeEquity(a);
 }
 
 function TooltipIcon({ text }) {
@@ -658,18 +686,37 @@ export default function Questionnaire() {
   const [loadingDeal, setLoadingDeal] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  function applyResumeState(s) {
-    if (s.view              !== undefined) setView(s.view);
-    if (s.questionId        !== undefined) setQuestionId(s.questionId);
-    if (s.questionNumber    !== undefined) setQuestionNumber(s.questionNumber);
-    if (s.stateSelectContext !== undefined) setStateSelectContext(s.stateSelectContext);
-    if (s.equityInAssetPhase !== undefined) setEquityInAssetPhase(s.equityInAssetPhase);
-    if (s.equityOffset      !== undefined) setEquityOffset(s.equityOffset);
-    if (s.equityView        !== undefined) setEquityView(s.equityView);
-    if (s.equityQuestionId  !== undefined) setEquityQuestionId(s.equityQuestionId);
-    if (s.equityQuestionNum !== undefined) setEquityQuestionNum(s.equityQuestionNum);
-    if (s.equityTotal       !== undefined) setEquityTotal(s.equityTotal);
-    if (s.equityEntityType  !== undefined) setEquityEntityType(s.equityEntityType);
+  function applySnapshot(s) {
+    setView(s.view);
+    setQuestionId(s.questionId);
+    setQuestionNumber(s.questionNumber);
+    setStateSelectContext(s.stateSelectContext);
+    setSelectedStates(s.selectedStates ?? []);
+    setStateSalesData(s.stateSalesData ?? {});
+    setEquityInAssetPhase(s.equityInAssetPhase);
+    setEquityOffset(s.equityOffset);
+    setEquityView(s.equityView);
+    setEquityQuestionId(s.equityQuestionId);
+    setEquityQuestionNum(s.equityQuestionNum);
+    setEquityTotal(s.equityTotal);
+    setEquityEntityType(s.equityEntityType);
+  }
+
+  function captureSnapshot() {
+    return {
+      view, questionId, questionNumber, stateSelectContext,
+      selectedStates, stateSalesData,
+      equityInAssetPhase, equityOffset,
+      equityView, equityQuestionId, equityQuestionNum, equityTotal, equityEntityType,
+    };
+  }
+
+  function handleBack() {
+    if (historyStack.length === 0) return;
+    const prev = historyStack[historyStack.length - 1];
+    setHistoryStack((h) => h.slice(0, -1));
+    setError("");
+    applySnapshot(prev);
   }
 
   useEffect(() => {
@@ -684,7 +731,9 @@ export default function Questionnaire() {
         setDealType(dt);
         const savedAnswers = answersData.answers ?? [];
         if (savedAnswers.length > 0) {
-          applyResumeState(computeResumeState(dt, savedAnswers));
+          const { finalState, history } = computeResumeState(dt, savedAnswers);
+          applySnapshot(finalState);
+          setHistoryStack(history);
         }
       })
       .catch(() => setLoadError("Failed to load deal."))
@@ -714,6 +763,9 @@ export default function Questionnaire() {
   const [textInputValue, setTextInputValue] = useState("");
   const [numericInputValue, setNumericInputValue] = useState("");
   const [equityEntityType, setEquityEntityType] = useState(null);
+
+  // ── Back navigation ──────────────────────────────────────────────────────
+  const [historyStack, setHistoryStack] = useState([]); // stack of state snapshots for Back
 
   // ── Shared ───────────────────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false);
@@ -755,8 +807,10 @@ export default function Questionnaire() {
     if (!dealId) return;
     setError("");
     setSubmitting(true);
+    const snap = captureSnapshot();
     try {
       await postAnswer(questionId, answer);
+      setHistoryStack((h) => [...h, snap]);
       const outcome = QUESTIONS[questionId].outcomes[answer];
       if (outcome.stateSelect) {
         setStateSelectContext({ questionId, nextId: outcome.next, nextNumber: outcome.nextNumber });
@@ -789,8 +843,10 @@ export default function Questionnaire() {
     if (!dealId) return;
     setError("");
     setSubmitting(true);
+    const snap = captureSnapshot();
     try {
       await postAnswer(questionId, numericInputValue.trim() || "0");
+      setHistoryStack((h) => [...h, snap]);
       const q = QUESTIONS[questionId];
       setNumericInputValue("");
       if (q.next === "done") {
@@ -814,6 +870,8 @@ export default function Questionnaire() {
 
   function handleStateSelectContinue() {
     const { nextId, nextNumber } = stateSelectContext;
+    const snap = captureSnapshot();
+    setHistoryStack((h) => [...h, snap]);
     if (selectedStates.length === 0) {
       if (nextId === "done") setView("done");
       else { setQuestionId(nextId); setQuestionNumber(equityOffset + nextNumber); setView("question"); }
@@ -905,6 +963,7 @@ export default function Questionnaire() {
     if (!dealId) return;
     setError("");
     setSubmitting(true);
+    const snap = captureSnapshot();
     try {
       const statesPayload = selectedStates.map((s) => ({
         state: s,
@@ -921,6 +980,7 @@ export default function Questionnaire() {
         const data = await res.json();
         throw new Error(data.error || "Server error");
       }
+      setHistoryStack((h) => [...h, snap]);
       const { nextId, nextNumber } = stateSelectContext;
       if (nextId === "done") setView("done");
       else { setQuestionId(nextId); setQuestionNumber(equityOffset + nextNumber); setView("question"); }
@@ -936,8 +996,10 @@ export default function Questionnaire() {
     if (!dealId) return;
     setError("");
     setSubmitting(true);
+    const snap = captureSnapshot();
     try {
       await postAnswer("entity_type", entityType);
+      setHistoryStack((h) => [...h, snap]);
       setEquityTotal(EQUITY_BASE_TOTALS[entityType]);
       setEquityEntityType(entityType);
       setEquityQuestionId(EQUITY_FIRST_QUESTION[entityType]);
@@ -954,8 +1016,10 @@ export default function Questionnaire() {
     if (!dealId) return;
     setError("");
     setSubmitting(true);
+    const snap = captureSnapshot();
     try {
       await postAnswer(equityQuestionId, answer);
+      setHistoryStack((h) => [...h, snap]);
       const q = EQUITY_QUESTIONS[equityQuestionId];
 
       // Extend total when optional branching questions are triggered
@@ -993,8 +1057,10 @@ export default function Questionnaire() {
     if (!dealId) return;
     setError("");
     setSubmitting(true);
+    const snap = captureSnapshot();
     try {
       await postAnswer(equityQuestionId, numericInputValue.trim() || "0");
+      setHistoryStack((h) => [...h, snap]);
       setNumericInputValue("");
       const isLastFinancial =
         equityQuestionId === "officer_comp" ||
@@ -1029,8 +1095,10 @@ export default function Questionnaire() {
     if (!dealId || !textInputValue.trim()) return;
     setError("");
     setSubmitting(true);
+    const snap = captureSnapshot();
     try {
       await postAnswer(equityQuestionId, textInputValue.trim());
+      setHistoryStack((h) => [...h, snap]);
       const q = EQUITY_QUESTIONS[equityQuestionId];
       setTextInputValue("");
       setEquityQuestionId(q.next);
@@ -1112,6 +1180,11 @@ export default function Questionnaire() {
             {/* ── Asset: question (yes/no or numeric input) ── */}
             {view === "question" && currentAssetQ && (
               <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
+                {historyStack.length > 0 && (
+                  <button onClick={handleBack} disabled={submitting} className="text-sm text-gray-400 hover:text-gray-600 mb-5 inline-flex items-center gap-1 transition-colors disabled:opacity-40">
+                    ← Back
+                  </button>
+                )}
                 <p className="text-gray-800 text-base font-medium leading-relaxed mb-6">
                   {currentAssetQ.text}
                   {!currentAssetQ.type && <TooltipIcon text={TOOLTIPS[questionId]} />}
@@ -1170,6 +1243,11 @@ export default function Questionnaire() {
             {/* ── Asset: State multi-select ── */}
             {view === "state-select" && (
               <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
+                {historyStack.length > 0 && (
+                  <button onClick={handleBack} disabled={submitting} className="text-sm text-gray-400 hover:text-gray-600 mb-5 inline-flex items-center gap-1 transition-colors disabled:opacity-40">
+                    ← Back
+                  </button>
+                )}
                 <p className="text-gray-800 text-base font-medium mb-1">Select all applicable states:</p>
                 <p className="text-xs text-blue-400 mb-5">
                   {selectedStates.length} state{selectedStates.length !== 1 ? "s" : ""} selected
@@ -1317,6 +1395,11 @@ export default function Questionnaire() {
             {/* ── Asset: State sales inputs ── */}
             {view === "state-sales" && (
               <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
+                {historyStack.length > 0 && (
+                  <button onClick={handleBack} disabled={submitting} className="text-sm text-gray-400 hover:text-gray-600 mb-5 inline-flex items-center gap-1 transition-colors disabled:opacity-40">
+                    ← Back
+                  </button>
+                )}
                 <p className="text-gray-800 text-base font-medium mb-1">Enter annual sales amounts ($) by state:</p>
                 <p className="text-xs text-blue-400 mb-6">Year 1 is most recent</p>
                 <div className="space-y-6 mb-6 max-h-96 overflow-y-auto pr-1">
@@ -1395,6 +1478,11 @@ export default function Questionnaire() {
             {/* ── Equity: Yes/No question ── */}
             {equityView === "question" && currentEquityQ && (
               <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
+                {historyStack.length > 0 && (
+                  <button onClick={handleBack} disabled={submitting} className="text-sm text-gray-400 hover:text-gray-600 mb-5 inline-flex items-center gap-1 transition-colors disabled:opacity-40">
+                    ← Back
+                  </button>
+                )}
                 <p className="text-gray-800 text-base font-medium leading-relaxed mb-8">
                   {currentEquityQ.text}
                   <TooltipIcon text={TOOLTIPS[equityQuestionId]} />
@@ -1410,6 +1498,11 @@ export default function Questionnaire() {
             {/* ── Equity: Numeric input (financial data) ── */}
             {equityView === "numeric-input" && currentEquityQ && (
               <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
+                {historyStack.length > 0 && (
+                  <button onClick={handleBack} disabled={submitting} className="text-sm text-gray-400 hover:text-gray-600 mb-5 inline-flex items-center gap-1 transition-colors disabled:opacity-40">
+                    ← Back
+                  </button>
+                )}
                 <p className="text-gray-800 text-base font-medium leading-relaxed mb-6">
                   {currentEquityQ.text}
                 </p>
@@ -1439,6 +1532,11 @@ export default function Questionnaire() {
             {/* ── Equity: Text input (NOL amount) ── */}
             {equityView === "text-input" && currentEquityQ && (
               <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
+                {historyStack.length > 0 && (
+                  <button onClick={handleBack} disabled={submitting} className="text-sm text-gray-400 hover:text-gray-600 mb-5 inline-flex items-center gap-1 transition-colors disabled:opacity-40">
+                    ← Back
+                  </button>
+                )}
                 <p className="text-gray-800 text-base font-medium leading-relaxed mb-6">
                   {currentEquityQ.text}
                   <TooltipIcon text={TOOLTIPS[equityQuestionId]} />
