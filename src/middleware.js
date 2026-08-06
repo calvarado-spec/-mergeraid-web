@@ -3,11 +3,11 @@ import { NextResponse } from "next/server";
 export function middleware(request) {
   const { pathname } = request.nextUrl;
 
-  // Always allow these paths through
+  // Always pass API routes, static assets, and public pages through
   if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/api") ||
-    pathname.startsWith("/images") ||
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/images/") ||
     pathname === "/coming-soon" ||
     pathname === "/sample-report" ||
     pathname === "/favicon.ico"
@@ -25,7 +25,9 @@ export function middleware(request) {
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|_next/webpack|favicon\\.ico|images|api|coming-soon|sample-report).*)",
-  ],
+  // Standard Next.js pattern: skip middleware for api routes and static assets.
+  // The function body above is the authoritative allow-list; this matcher is a
+  // performance optimisation that prevents the middleware from even loading for
+  // paths that clearly don't need it.
+  matcher: ["/((?!api|_next|images|favicon\\.ico).*)"],
 };
