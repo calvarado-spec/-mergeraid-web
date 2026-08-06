@@ -64,11 +64,13 @@ export default function Terms() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">5. Subscription and Payment</h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-3">5. Payment</h2>
             <p className="text-gray-700 leading-relaxed">
-              Access to the Platform requires payment of applicable fees. All fees are non-refundable except as required
-              by law. Subscriptions automatically renew unless cancelled before the renewal date. We reserve the right to
-              modify pricing with 30 days notice. Payment is processed by Stripe and subject to Stripe&apos;s terms of service.
+              Access to the Platform requires payment of the applicable fee prior to use. Each payment grants the purchaser
+              one screening report credit, which is consumed upon initiating a new deal screening. Report credits do not
+              expire. All fees are non-refundable except as required by law. We reserve the right to modify pricing at any
+              time; pricing changes will not affect credits already purchased. Payment is processed by Stripe and subject
+              to Stripe&apos;s terms of service.
             </p>
           </section>
 
