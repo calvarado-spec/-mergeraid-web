@@ -35,6 +35,25 @@ const FREE_FORM_QUESTIONS = new Set([
 ]);
 
 export default async function handler(req, res) {
+  if (req.method === "GET") {
+    const { dealId } = req.query;
+    if (!dealId) return res.status(400).json({ error: "dealId is required" });
+    try {
+      // DISTINCT ON returns the most-recent answer for each question
+      const result = await pool.query(
+        `SELECT DISTINCT ON (question_id) question_id, answer
+         FROM answers
+         WHERE deal_id = $1
+         ORDER BY question_id, created_at DESC`,
+        [dealId]
+      );
+      return res.status(200).json({ answers: result.rows });
+    } catch (err) {
+      console.error("DB error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }

@@ -497,6 +497,144 @@ const TOOLTIPS = {
   eq_utp: "Uncertain tax positions are tax positions where the company believes there is less than a 50% likelihood of being sustained under IRS scrutiny. These are recorded as liabilities under ASC 740 and represent quantified tax risk on the balance sheet.",
 };
 
+// ── Resume-state computation ──────────────────────────────────────────────────
+// These pure functions replay the branching flow using saved answers and return
+// the state object needed to resume at the first unanswered question.
+
+function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum) {
+  let qId = "prior_reorg";
+  let qNum = startQNum;
+
+  for (let guard = 0; guard < 60; guard++) {
+    const q = QUESTIONS[qId];
+    if (!q) return { view: "done" };
+
+    if (a[qId] === undefined) {
+      return {
+        view: "question",
+        questionId: qId,
+        questionNumber: equityOffset + qNum,
+        equityInAssetPhase: inEquityAssetPhase,
+        equityOffset,
+      };
+    }
+
+    const ans = a[qId];
+
+    if (q.type === "numeric-input") {
+      if (!q.next || q.next === "done") return { view: "done" };
+      qId = q.next;
+      qNum = q.nextNumber !== undefined ? q.nextNumber : qNum;
+      continue;
+    }
+
+    const outcome = q.outcomes?.[ans];
+    if (!outcome) return { view: "done" };
+
+    if (outcome.stateSelect) {
+      const { next: nextId, nextNumber: nextNum } = outcome;
+      // If the question after state-select is already answered, state-select was completed
+      if (nextId !== "done" && a[nextId] !== undefined) {
+        qId = nextId;
+        qNum = nextNum;
+        continue;
+      }
+      return {
+        view: "state-select",
+        questionId: qId,
+        questionNumber: equityOffset + qNum,
+        stateSelectContext: { questionId: qId, nextId, nextNumber: nextNum },
+        equityInAssetPhase: inEquityAssetPhase,
+        equityOffset,
+      };
+    }
+
+    if (outcome.next === "done") return { view: "done" };
+
+    let nextId = outcome.next;
+    let nextNum = outcome.nextNumber;
+
+    // Pure-asset flow only: inject gross_receipts block before erc_claimed
+    if (!inEquityAssetPhase && nextId === "erc_claimed" &&
+        (qId === "prior_reorg" || qId === "prior_diligence")) {
+      nextId = "gross_receipts_y1";
+      nextNum = qNum;
+    }
+
+    qId = nextId;
+    qNum = nextNum;
+  }
+
+  return { view: "done" };
+}
+
+function resumeEquity(a) {
+  const entityType = a["entity_type"];
+  if (!entityType) {
+    return { equityView: "entity-select" };
+  }
+
+  let equityTotal = EQUITY_BASE_TOTALS[entityType];
+  let equityQuestionId = EQUITY_FIRST_QUESTION[entityType];
+  let equityQuestionNum = 2;
+
+  for (let guard = 0; guard < 60; guard++) {
+    const q = EQUITY_QUESTIONS[equityQuestionId];
+    if (!q) break;
+
+    if (a[equityQuestionId] === undefined) {
+      const equityView =
+        q.type === "numeric-input" ? "numeric-input" :
+        q.type === "text-input"    ? "text-input"    : "question";
+      return { equityView, equityQuestionId, equityQuestionNum, equityTotal, equityEntityType: entityType };
+    }
+
+    const ans = a[equityQuestionId];
+
+    // Track optional-question total extensions
+    if (equityQuestionId === "scorp_converted_from_c" && ans === "yes") equityTotal += 1;
+    if (equityQuestionId === "ccorp_nol" && ans === "yes") equityTotal += 1;
+
+    // Detect transition into asset phase
+    const isLastFinancial =
+      equityQuestionId === "officer_comp" ||
+      (equityQuestionId === "taxable_income_y3" && entityType !== "scorp");
+
+    if (isLastFinancial) {
+      const equityOffset = equityQuestionNum;
+      const assetState = resumeAsset(a, true, equityOffset, equityQuestionNum + 1);
+      return { ...assetState, equityTotal, equityEntityType: entityType, equityOffset, equityInAssetPhase: true };
+    }
+
+    // scorp: taxable_income_y3 → officer_comp (still in equity numeric phase)
+    if (equityQuestionId === "taxable_income_y3" && entityType === "scorp") {
+      equityQuestionId = "officer_comp";
+      equityQuestionNum += 1;
+      continue;
+    }
+
+    const nextId = ans === "yes" ? (q.yesNext ?? q.next) : (q.noNext ?? q.next);
+
+    if (!nextId || !EQUITY_QUESTIONS[nextId]) {
+      // No more equity questions — transition to asset phase
+      const equityOffset = equityQuestionNum;
+      const assetState = resumeAsset(a, true, equityOffset, equityQuestionNum + 1);
+      return { ...assetState, equityTotal, equityEntityType: entityType, equityOffset, equityInAssetPhase: true };
+    }
+
+    equityQuestionId = nextId;
+    equityQuestionNum += 1;
+  }
+
+  return { equityView: "entity-select" };
+}
+
+function computeResumeState(dealType, savedAnswers) {
+  const a = {};
+  for (const row of savedAnswers) a[row.question_id] = row.answer;
+  return dealType === "asset" ? resumeAsset(a, false, 0, 1) : resumeEquity(a);
+}
+
 function TooltipIcon({ text }) {
   if (!text) return null;
   return (
@@ -520,13 +658,34 @@ export default function Questionnaire() {
   const [loadingDeal, setLoadingDeal] = useState(true);
   const [loadError, setLoadError] = useState("");
 
+  function applyResumeState(s) {
+    if (s.view              !== undefined) setView(s.view);
+    if (s.questionId        !== undefined) setQuestionId(s.questionId);
+    if (s.questionNumber    !== undefined) setQuestionNumber(s.questionNumber);
+    if (s.stateSelectContext !== undefined) setStateSelectContext(s.stateSelectContext);
+    if (s.equityInAssetPhase !== undefined) setEquityInAssetPhase(s.equityInAssetPhase);
+    if (s.equityOffset      !== undefined) setEquityOffset(s.equityOffset);
+    if (s.equityView        !== undefined) setEquityView(s.equityView);
+    if (s.equityQuestionId  !== undefined) setEquityQuestionId(s.equityQuestionId);
+    if (s.equityQuestionNum !== undefined) setEquityQuestionNum(s.equityQuestionNum);
+    if (s.equityTotal       !== undefined) setEquityTotal(s.equityTotal);
+    if (s.equityEntityType  !== undefined) setEquityEntityType(s.equityEntityType);
+  }
+
   useEffect(() => {
     if (!dealId) return;
-    fetch(`/api/deals?dealId=${dealId}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) setLoadError(d.error);
-        else setDealType(d.deal_type);
+    Promise.all([
+      fetch(`/api/deals?dealId=${dealId}`).then((r) => r.json()),
+      fetch(`/api/answers?dealId=${dealId}`).then((r) => r.json()),
+    ])
+      .then(([dealData, answersData]) => {
+        if (dealData.error) { setLoadError(dealData.error); return; }
+        const dt = dealData.deal_type;
+        setDealType(dt);
+        const savedAnswers = answersData.answers ?? [];
+        if (savedAnswers.length > 0) {
+          applyResumeState(computeResumeState(dt, savedAnswers));
+        }
       })
       .catch(() => setLoadError("Failed to load deal."))
       .finally(() => setLoadingDeal(false));
