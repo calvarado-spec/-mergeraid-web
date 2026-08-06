@@ -56,7 +56,13 @@ export default async function handler(req, res) {
 
   try {
     const dealCheck = await pool.query(
-      "SELECT is_complete FROM deals WHERE id = $1",
+      `SELECT
+         EXISTS(
+           SELECT 1 FROM answers
+           WHERE deal_id = d.id AND question_id = 'unclaimed_property'
+         ) AS is_complete
+       FROM deals d
+       WHERE d.id = $1`,
       [dealId]
     );
     if (dealCheck.rows.length === 0) {
