@@ -65,7 +65,9 @@ export default async function handler(req, res) {
         resolvedCustomerId = created.id;
       }
 
-      await pool.query(
+      console.log(`[webhook] checkout.session.completed userId=${userId} customerId=${resolvedCustomerId}`);
+
+      const updateResult = await pool.query(
         `UPDATE users
          SET report_credits          = report_credits + 1,
              stripe_customer_id      = $1,
@@ -73,6 +75,12 @@ export default async function handler(req, res) {
          WHERE id = $2::uuid`,
         [resolvedCustomerId, userId]
       );
+
+      if (updateResult.rowCount === 0) {
+        console.error(`[webhook] UPDATE matched 0 rows — userId=${userId} not found or UUID mismatch`);
+      } else {
+        console.log(`[webhook] report_credits incremented — rowCount=${updateResult.rowCount} userId=${userId}`);
+      }
     }
 
     return res.status(200).json({ received: true });
