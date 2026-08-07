@@ -1,39 +1,59 @@
+import { getThreshold, NO_SALES_TAX_STATES } from "./nexusThresholds.js";
+
 function parseNum(val) {
   if (val == null || val === "") return null;
   const n = parseFloat(String(val).replace(/[^0-9.-]/g, ""));
   return isNaN(n) ? null : n;
 }
 
-function fmt(n) {
-  return "$" + Math.round(n).toLocaleString("en-US");
-}
-
-// stateSales    — all state_sales rows (used for Sales & Use Tax, Calc 1)
-// incomeTaxSales — rows where question_id = 'income_tax_nexus' (used for State Income Tax, Calc 5)
+// stateSales      — all state_sales rows (includes question_id); Calc 1 filters to sales_tax_nexus
+// incomeTaxSales  — rows where question_id = 'income_tax_nexus' (used for Calc 5)
 export function calculateExposures(answers, stateSales, incomeTaxSales) {
   const a = {};
   for (const row of answers) a[row.question_id] = row.answer;
 
   const exposures = [];
 
-  // ── 1. Sales & Use Tax — per-state totals ──────────────────────────────────
+  // ── 1. Sales & Use Tax — threshold-based ─────────────────────────────────
   if (stateSales && stateSales.length > 0) {
-    let totalSales = 0;
-    for (const row of stateSales) {
-      totalSales += (parseNum(row.year_1) || 0) + (parseNum(row.year_2) || 0) + (parseNum(row.year_3) || 0);
+    const stRows = stateSales.filter(
+      (r) => (r.question_id ?? "sales_tax_nexus") === "sales_tax_nexus"
+    );
+    const individualRows = stRows.filter((r) => r.state !== "Other (combined)");
+    const combinedRow    = stRows.find((r)  => r.state === "Other (combined)");
+
+    let aboveTotal = 0;
+    let statesAbove = 0;
+    for (const row of individualRows) {
+      if (NO_SALES_TAX_STATES.has(row.state)) continue;
+      const amount = parseNum(row.year_1) || 0;
+      if (amount >= getThreshold(row.state)) {
+        aboveTotal += amount;
+        statesAbove++;
+      }
     }
-    if (totalSales > 0) {
+    const combinedAmount = combinedRow ? (parseNum(combinedRow.year_1) || 0) : 0;
+
+    // Individual above-threshold: × 3 years × 2%/6%
+    // Combined bucket: × 3 years × 50%/100% probability discount × 2%/6%
+    const totalLow  = aboveTotal * 3 * 0.02 + combinedAmount * 0.50 * 3 * 0.02;
+    const totalHigh = aboveTotal * 3 * 0.06 + combinedAmount * 1.00 * 3 * 0.06;
+
+    if (totalLow > 0 || totalHigh > 0) {
+      const descParts = [];
+      if (statesAbove > 0) descParts.push(`${statesAbove} state${statesAbove !== 1 ? "s" : ""} meeting economic nexus threshold`);
+      if (combinedRow) descParts.push("probability-adjusted combined estimate");
       exposures.push({
         category: "Sales & Use Tax",
-        description: `Estimated unremitted sales tax across ${stateSales.length} state${stateSales.length !== 1 ? "s" : ""} based on reported sales figures`,
-        lowEstimate: totalSales * 0.02,
-        highEstimate: totalSales * 0.06,
-        basis: "2%–6% of total multi-state sales (blended effective rate)",
+        description: `Estimated unremitted sales tax based on reported sales in ${descParts.join(" and ")}`,
+        lowEstimate: totalLow,
+        highEstimate: totalHigh,
+        basis: "Applies 2%–6% blended effective rate to 3-year annual sales in threshold-crossing states. Combined-estimate bucket discounted at 50% (low) to 100% (high) for threshold uncertainty.",
       });
     }
   }
 
-  // ── 2. ERC Recapture ────────────────────────────────────────────────────────
+  // ── 2. ERC Recapture ──────────────────────────────────────────────────────
   if (a.erc_claimed === "yes") {
     const erc = parseNum(a.erc_amount);
     if (erc !== null && erc > 0) {
@@ -47,14 +67,14 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
     }
   }
 
-  // ── 3. Reasonable Compensation (S Corp only) ────────────────────────────────
+  // ── 3. Reasonable Compensation (S Corp only) ──────────────────────────────
   if (a.entity_type === "scorp") {
     const comp = parseNum(a.officer_comp);
     if (comp !== null) {
-      const lowShortfall = Math.max(0, 150000 - comp);
+      const lowShortfall  = Math.max(0, 150000 - comp);
       const highShortfall = Math.max(0, 250000 - comp);
-      const lowExposure = lowShortfall * 0.153;
-      const highExposure = highShortfall * 0.153;
+      const lowExposure   = lowShortfall  * 0.153;
+      const highExposure  = highShortfall * 0.153;
       if (highExposure > 0) {
         exposures.push({
           category: "Federal Tax – Reasonable Comp",
@@ -67,7 +87,7 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
     }
   }
 
-  // ── 4. Contractor Misclassification ────────────────────────────────────────
+  // ── 4. Contractor Misclassification ───────────────────────────────────────
   if (a.contractor_usage === "yes" && a.contractor_classification === "no") {
     const count = parseNum(a.contractor_count);
     if (count !== null && count > 0) {
@@ -81,7 +101,7 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
     }
   }
 
-  // ── 5. State Income Tax Nexus — apportionment-based ────────────────────────
+  // ── 5. State Income Tax — apportionment-based ─────────────────────────────
   if (a.income_tax_nexus === "yes") {
     const itSales = incomeTaxSales || [];
     const y1GR = parseNum(a.gross_receipts_y1);
@@ -90,56 +110,53 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
     const y1TI = parseNum(a.taxable_income_y1);
     const y2TI = parseNum(a.taxable_income_y2);
     const y3TI = parseNum(a.taxable_income_y3);
-
     const hasTaxableIncome = y1TI !== null || y2TI !== null || y3TI !== null;
 
-    // Sum state sales by year across all income_tax_nexus states
-    let itSalesY1 = 0, itSalesY2 = 0, itSalesY3 = 0;
-    for (const row of itSales) {
-      itSalesY1 += parseNum(row.year_1) || 0;
-      itSalesY2 += parseNum(row.year_2) || 0;
-      itSalesY3 += parseNum(row.year_3) || 0;
-    }
+    // Single annual estimate across all income_tax_nexus states
+    const totalItSales = itSales.reduce((sum, row) => sum + (parseNum(row.year_1) || 0), 0);
+
+    // P.L. 86-272 protects tangible goods sellers from state income tax when sole activity is solicitation
+    const pl272Factor = a.revenue_type === "goods" ? 0.5 : 1;
 
     if (hasTaxableIncome) {
-      // Real apportionment: attribute income to non-filing states via sales factor
       let totalAttrIncome = 0;
       let yearsUsed = 0;
 
-      const applyYear = (stateSales, grossReceipts, taxableIncome) => {
-        if (stateSales <= 0 || grossReceipts == null || grossReceipts <= 0 || taxableIncome == null) return;
-        const factor = Math.min(1, stateSales / grossReceipts);
-        const attributed = factor * Math.max(0, taxableIncome);
-        totalAttrIncome += attributed;
+      const applyYear = (grossReceipts, taxableIncome) => {
+        if (totalItSales <= 0 || grossReceipts == null || grossReceipts <= 0 || taxableIncome == null) return;
+        const factor = Math.min(1, totalItSales / grossReceipts);
+        totalAttrIncome += factor * Math.max(0, taxableIncome);
         yearsUsed++;
       };
 
-      applyYear(itSalesY1, y1GR, y1TI);
-      applyYear(itSalesY2, y2GR, y2TI);
-      applyYear(itSalesY3, y3GR, y3TI);
+      applyYear(y1GR, y1TI);
+      applyYear(y2GR, y2TI);
+      applyYear(y3GR, y3TI);
 
       if (yearsUsed > 0 && totalAttrIncome > 0) {
+        const basisSuffix = pl272Factor < 1
+          ? " Estimate reduced by 50% to reflect potential P.L. 86-272 protection for tangible goods sellers. Estimates reflect net income-based taxes only and exclude gross receipts taxes, franchise taxes, and minimum taxes."
+          : " Estimates reflect net income-based taxes only and exclude gross receipts taxes, franchise taxes, and minimum taxes.";
         exposures.push({
           category: "State Income Tax",
           description: "Estimated state income tax exposure in states where the company has nexus but has not filed returns",
-          lowEstimate: totalAttrIncome * 0.05,
-          highEstimate: totalAttrIncome * 0.09,
-          basis: "Apportions reported taxable income to non-filing states using a sales factor (reported state sales over total gross receipts) and applies a blended state rate of 5% to 9%. Estimates reflect net income-based taxes only and exclude gross receipts taxes, franchise taxes, and minimum taxes imposed by certain states.",
+          lowEstimate: totalAttrIncome * 0.05 * pl272Factor,
+          highEstimate: totalAttrIncome * 0.09 * pl272Factor,
+          basis: "Apportions reported taxable income to non-filing states using a sales factor (reported state sales over total gross receipts) and applies a blended state rate of 5% to 9%." + basisSuffix,
         });
       }
-    } else {
-      // Fallback: use total state sales × assumed 7.5% pre-tax margin
-      const totalItSales = itSalesY1 + itSalesY2 + itSalesY3;
-      if (totalItSales > 0) {
-        const assumedIncome = totalItSales * 0.075;
-        exposures.push({
-          category: "State Income Tax",
-          description: "Estimated state income tax exposure in states where the company has nexus but has not filed returns",
-          lowEstimate: assumedIncome * 0.05,
-          highEstimate: assumedIncome * 0.09,
-          basis: "Apportions reported taxable income to non-filing states using a sales factor (reported state sales over total gross receipts) and applies a blended state rate of 5% to 9%. Estimates reflect net income-based taxes only and exclude gross receipts taxes, franchise taxes, and minimum taxes imposed by certain states. Taxable income was not provided; a 7.5% assumed pre-tax margin was applied to reported state sales.",
-        });
-      }
+    } else if (totalItSales > 0) {
+      const assumedIncome = totalItSales * 0.075;
+      const basisSuffix = pl272Factor < 1
+        ? " Reduced by 50% for potential P.L. 86-272 protection. Taxable income was not provided; a 7.5% assumed pre-tax margin was applied to reported state sales."
+        : " Taxable income was not provided; a 7.5% assumed pre-tax margin was applied to reported state sales.";
+      exposures.push({
+        category: "State Income Tax",
+        description: "Estimated state income tax exposure in states where the company has nexus but has not filed returns",
+        lowEstimate: assumedIncome * 0.05 * pl272Factor,
+        highEstimate: assumedIncome * 0.09 * pl272Factor,
+        basis: "Apportions taxable income to non-filing states using a sales factor and applies a blended state rate of 5% to 9%." + basisSuffix,
+      });
     }
   }
 

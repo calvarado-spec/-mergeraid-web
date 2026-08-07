@@ -23,17 +23,15 @@ export default async function handler(req, res) {
 
   try {
     await Promise.all(
-      states.map(({ state, year1, year2, year3 }) =>
+      states.map(({ state, year1 }) =>
         pool.query(
           `INSERT INTO state_sales (deal_id, question_id, state, year_1, year_2, year_3, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+           VALUES ($1, $2, $3, $4, NULL, NULL, NOW())`,
           [
             dealId,
             questionId,
             state,
             year1 !== "" && year1 != null ? Number(year1) : null,
-            year2 !== "" && year2 != null ? Number(year2) : null,
-            year3 !== "" && year3 != null ? Number(year3) : null,
           ]
         )
       )

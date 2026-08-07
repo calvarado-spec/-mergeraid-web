@@ -8,6 +8,7 @@ const VALID_QUESTION_IDS = new Set([
   "erc_claimed", "erc_q3_2021", "erc_received_2yr",
   "tax_exam", "tax_exam_resolved",
   "related_party", "related_party_fmv",
+  "revenue_type",
   "income_tax_nexus", "physical_nexus",
   "taxable_sales", "sales_tax_nexus",
   "exemption_certs", "use_tax_review",
@@ -32,6 +33,7 @@ const FREE_FORM_QUESTIONS = new Set([
   "gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3",
   "taxable_income_y1", "taxable_income_y2", "taxable_income_y3",
   "officer_comp", "erc_amount", "contractor_count",
+  "revenue_type",
 ]);
 
 export default async function handler(req, res) {

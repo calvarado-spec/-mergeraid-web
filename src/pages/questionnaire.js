@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import Papa from "papaparse";
-import * as XLSX from "xlsx";
 import FlowHeader from "../components/FlowHeader";
 import FlowStepper from "../components/FlowStepper";
 
@@ -19,93 +17,7 @@ const US_STATES = [
   "West Virginia", "Wisconsin", "Wyoming", "District of Columbia",
 ];
 
-const US_STATE_ABBR = {
-  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
-  CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
-  HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
-  KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
-  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi",
-  MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire",
-  NJ: "New Jersey", NM: "New Mexico", NY: "New York", NC: "North Carolina",
-  ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania",
-  RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee",
-  TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia", WA: "Washington",
-  WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming", DC: "District of Columbia",
-};
-
-function matchUSState(value) {
-  if (value == null) return null;
-  const v = String(value).trim();
-  if (!v) return null;
-  const fullMatch = US_STATES.find((s) => s.toLowerCase() === v.toLowerCase());
-  if (fullMatch) return fullMatch;
-  return US_STATE_ABBR[v.toUpperCase()] || null;
-}
-
-function parseDollarAmount(value) {
-  if (value == null) return null;
-  const cleaned = String(value).replace(/[^0-9.-]/g, "");
-  if (cleaned === "" || cleaned === "-") return null;
-  const n = parseFloat(cleaned);
-  return isNaN(n) ? null : n;
-}
-
-// Takes a grid of raw cell values (array of arrays, as produced by Papa.parse
-// or XLSX sheet_to_json with header:1) and heuristically locates the state
-// column and up to 3 year/amount columns — no fixed header names required.
-function detectStateSalesFromGrid(rows) {
-  if (!rows || rows.length === 0) return [];
-  const filtered = rows
-    .map((r) => (Array.isArray(r) ? r : Object.values(r)))
-    .filter((r) => r.some((c) => String(c ?? "").trim() !== ""));
-  if (filtered.length === 0) return [];
-
-  // Skip a likely header row (one with no state matches and few numeric cells)
-  const firstRow = filtered[0];
-  const firstRowHasState = firstRow.some((c) => matchUSState(c));
-  const firstRowNumericCount = firstRow.filter((c) => parseDollarAmount(c) !== null).length;
-  const startIdx = !firstRowHasState && firstRowNumericCount < Math.ceil(firstRow.length / 2) ? 1 : 0;
-  const dataRows = filtered.slice(startIdx);
-  if (dataRows.length === 0) return [];
-
-  const numCols = Math.max(...dataRows.map((r) => r.length));
-
-  let stateColIdx = -1;
-  let bestStateMatches = 0;
-  for (let c = 0; c < numCols; c++) {
-    const matches = dataRows.filter((r) => matchUSState(r[c])).length;
-    if (matches > bestStateMatches) {
-      bestStateMatches = matches;
-      stateColIdx = c;
-    }
-  }
-
-  const numericCols = [];
-  for (let c = 0; c < numCols; c++) {
-    if (c === stateColIdx) continue;
-    const matches = dataRows.filter((r) => parseDollarAmount(r[c]) !== null).length;
-    if (matches > 0) numericCols.push(c);
-  }
-  const yearCols = numericCols.slice(0, 3);
-
-  const results = [];
-  for (const row of dataRows) {
-    const state = stateColIdx >= 0 ? matchUSState(row[stateColIdx]) : null;
-    const year1 = yearCols[0] !== undefined ? parseDollarAmount(row[yearCols[0]]) : null;
-    const year2 = yearCols[1] !== undefined ? parseDollarAmount(row[yearCols[1]]) : null;
-    const year3 = yearCols[2] !== undefined ? parseDollarAmount(row[yearCols[2]]) : null;
-    if (!state && year1 == null && year2 == null && year3 == null) continue;
-    results.push({
-      state: state || "",
-      year1: year1 != null ? String(year1) : "",
-      year2: year2 != null ? String(year2) : "",
-      year3: year3 != null ? String(year3) : "",
-    });
-  }
-  return results;
-}
-
-// ── Asset deal: 14-question flow ─────────────────────────────────────────────
+// ── Asset deal: 16-question flow ─────────────────────────────────────────────
 const QUESTIONS = {
   prior_reorg: {
     number: 1,
@@ -167,100 +79,114 @@ const QUESTIONS = {
     number: 5,
     text: "Is the Company party to any related party transactions?",
     outcomes: {
-      yes: { next: "related_party_fmv",  nextNumber: 5 },
-      no:  { next: "income_tax_nexus",   nextNumber: 6 },
+      yes: { next: "related_party_fmv", nextNumber: 5 },
+      no:  { next: "revenue_type",      nextNumber: 6 },
     },
   },
   related_party_fmv: {
     number: 5,
     text: "Are all related party transactions done at fair market value?",
     outcomes: {
-      yes: { risk: true, next: "income_tax_nexus", nextNumber: 6 },
-      no:  { risk: true, next: "income_tax_nexus", nextNumber: 6 },
+      yes: { risk: true, next: "revenue_type", nextNumber: 6 },
+      no:  { risk: true, next: "revenue_type", nextNumber: 6 },
+    },
+  },
+  revenue_type: {
+    number: 6,
+    text: "What is the Company's primary source of revenue?",
+    choices: [
+      { value: "goods",    label: "Sale of tangible goods" },
+      { value: "services", label: "Performance of services" },
+      { value: "both",     label: "Both goods and services" },
+    ],
+    outcomes: {
+      goods:    { next: "income_tax_nexus", nextNumber: 7 },
+      services: { next: "income_tax_nexus", nextNumber: 7 },
+      both:     { next: "income_tax_nexus", nextNumber: 7 },
     },
   },
   income_tax_nexus: {
-    number: 6,
-    text: "Does the Company have sales to states where it does not currently file state income tax returns?",
+    number: 7,
+    text: "Does the Company have sales to customers in states where it does not file state income tax returns?",
     outcomes: {
-      yes: { stateSelect: true, next: "physical_nexus", nextNumber: 7 },
-      no:  { next: "physical_nexus", nextNumber: 7 },
+      yes: { stateSelect: true, next: "physical_nexus", nextNumber: 8 },
+      no:  { next: "physical_nexus", nextNumber: 8 },
     },
   },
   physical_nexus: {
-    number: 7,
+    number: 8,
     text: "Does the Company have any presence outside of states where they currently file? This includes employees, contractors, or property in those states.",
     outcomes: {
-      yes: { risk: true, next: "taxable_sales", nextNumber: 8 },
-      no:  { next: "taxable_sales", nextNumber: 8 },
+      yes: { risk: true, next: "taxable_sales", nextNumber: 9 },
+      no:  { next: "taxable_sales", nextNumber: 9 },
     },
   },
   taxable_sales: {
-    number: 8,
+    number: 9,
     text: "Does the Company make taxable sales of tangible goods or services for sales tax purposes?",
     outcomes: {
-      yes: { next: "sales_tax_nexus", nextNumber: 8 },
-      no:  { next: "exemption_certs", nextNumber: 9 },
+      yes: { next: "sales_tax_nexus", nextNumber: 9 },
+      no:  { next: "exemption_certs", nextNumber: 10 },
     },
   },
   sales_tax_nexus: {
-    number: 8,
-    text: "Does the Company have sales to states where it does not currently file sales and use tax returns?",
+    number: 9,
+    text: "Does the Company have sales to customers in states where it does not collect or remit sales and use tax?",
     outcomes: {
-      yes: { stateSelect: true, next: "exemption_certs", nextNumber: 9 },
-      no:  { next: "exemption_certs", nextNumber: 9 },
+      yes: { stateSelect: true, next: "exemption_certs", nextNumber: 10 },
+      no:  { next: "exemption_certs", nextNumber: 10 },
     },
   },
   exemption_certs: {
-    number: 9,
+    number: 10,
     text: "Are exemption certificates collected and refreshed from customers who claim exemption from sales tax?",
     outcomes: {
-      yes: { next: "use_tax_review", nextNumber: 10 },
-      no:  { risk: true, next: "use_tax_review", nextNumber: 10 },
+      yes: { next: "use_tax_review", nextNumber: 11 },
+      no:  { risk: true, next: "use_tax_review", nextNumber: 11 },
     },
   },
   use_tax_review: {
-    number: 10,
+    number: 11,
     text: "Does the Company regularly review invoices from vendors for instances where sales tax was not charged?",
     outcomes: {
-      yes: { next: "employment_tax_states", nextNumber: 11 },
-      no:  { risk: true, next: "employment_tax_states", nextNumber: 11 },
+      yes: { next: "employment_tax_states", nextNumber: 12 },
+      no:  { risk: true, next: "employment_tax_states", nextNumber: 12 },
     },
   },
   employment_tax_states: {
-    number: 11,
+    number: 12,
     text: "Does the Company have employees residing or traveling to states where the Company does not file employment tax returns?",
     outcomes: {
-      yes: { risk: true, next: "contractor_usage", nextNumber: 12 },
-      no:  { next: "contractor_usage", nextNumber: 12 },
+      yes: { risk: true, next: "contractor_usage", nextNumber: 13 },
+      no:  { next: "contractor_usage", nextNumber: 13 },
     },
   },
   contractor_usage: {
-    number: 12,
+    number: 13,
     text: "Does the Company engage independent contractors?",
     outcomes: {
-      yes: { next: "contractor_classification", nextNumber: 13 },
-      no:  { next: "property_tax", nextNumber: 14 },
+      yes: { next: "contractor_classification", nextNumber: 14 },
+      no:  { next: "property_tax", nextNumber: 15 },
     },
   },
   contractor_classification: {
-    number: 13,
+    number: 14,
     text: "Does the Company have a process in place to differentiate whether an independent contractor should be considered an employee?",
     outcomes: {
-      yes: { next: "contractor_count", nextNumber: 13 },
-      no:  { risk: true, next: "contractor_count", nextNumber: 13 },
+      yes: { next: "contractor_count", nextNumber: 14 },
+      no:  { risk: true, next: "contractor_count", nextNumber: 14 },
     },
   },
   property_tax: {
-    number: 14,
+    number: 15,
     text: "Does the Company file real or personal property tax returns in all states where property is located?",
     outcomes: {
-      yes: { next: "unclaimed_property", nextNumber: 15 },
-      no:  { risk: true, next: "unclaimed_property", nextNumber: 15 },
+      yes: { next: "unclaimed_property", nextNumber: 16 },
+      no:  { risk: true, next: "unclaimed_property", nextNumber: 16 },
     },
   },
   unclaimed_property: {
-    number: 15,
+    number: 16,
     text: "Does the Company have processes in place to address any uncashed checks or customer credits?",
     outcomes: {
       yes: { next: "done" },
@@ -314,17 +240,14 @@ const QUESTIONS = {
     next: "tax_exam", nextNumber: 4,
   },
   contractor_count: {
-    number: 13, type: "numeric-input",
+    number: 14, type: "numeric-input",
     text: "Approximate Number of Regular 1099 Contractors",
     placeholder: "e.g. 5",
-    next: "property_tax", nextNumber: 14,
+    next: "property_tax", nextNumber: 15,
   },
 };
 
 // ── Equity deal: entity-branching flow ───────────────────────────────────────
-// next: same destination for both yes/no
-// yesNext / noNext: different destinations per answer
-// type: "text-input" for free-text questions
 const EQUITY_QUESTIONS = {
   // S Corporation branch
   scorp_single_class: {
@@ -444,9 +367,9 @@ const EQUITY_QUESTIONS = {
   },
 };
 
-// Total questions per equity entity type (equity + asset phases combined)
+// Total questions per equity entity type (equity + asset phases combined, asset now 16)
 // Optional questions that extend these: scorp_big_assets (+1), ccorp_nol_amount (+1)
-const EQUITY_BASE_TOTALS = { scorp: 31, ccorp: 28, pship: 29 };
+const EQUITY_BASE_TOTALS = { scorp: 32, ccorp: 29, pship: 30 };
 const EQUITY_FIRST_QUESTION = {
   scorp: "scorp_single_class",
   ccorp: "ccorp_ownership_change",
@@ -463,10 +386,11 @@ const TOOLTIPS = {
   tax_exam_resolved: "A resolved examination means the taxing authority has formally closed the audit with no further adjustments or the company has fully paid any amounts owed. Unresolved examinations remain a contingent liability.",
   related_party: "Related party transactions are dealings between the company and its owners, officers, affiliates, or other connected parties — for example, rent paid to a shareholder-owned entity or loans between related companies.",
   related_party_fmv: "Fair market value means the price that would be agreed upon between unrelated parties in an arm's length transaction. Related party transactions not at FMV may be recharacterized by the IRS, creating additional tax exposure.",
-  income_tax_nexus: "Nexus is the level of connection between a company and a state that requires the company to file and pay taxes in that state. Economic nexus is typically triggered by exceeding a revenue threshold in a state, even without physical presence.",
+  revenue_type: "The nature of the Company's revenue affects the availability of P.L. 86-272 protections. Under P.L. 86-272, a company that only solicits orders for tangible goods in a state may be protected from state net income tax even if it has economic nexus there. This protection does not apply to service revenue.",
+  income_tax_nexus: "Economic nexus for income tax purposes is triggered when a company's sales into a state exceed a threshold — often $50,000 to $500,000 depending on the state — even without any physical presence. Most states adopted economic nexus standards following the Supreme Court's decision in South Dakota v. Wayfair (2018).",
   physical_nexus: "Physical presence nexus is created when a company has employees, contractors, inventory, equipment, or other property in a state. This generally requires the company to file income tax returns in that state.",
   taxable_sales: "Taxable sales are sales of tangible personal property or certain services that are subject to sales tax. Not all sales are taxable — for example, sales for resale or certain exempt services may not be.",
-  sales_tax_nexus: "Sales tax nexus is the connection to a state that requires a business to collect and remit sales tax. It can be created by physical presence or by exceeding economic thresholds, which vary by state.",
+  sales_tax_nexus: "Sales tax economic nexus is triggered by exceeding a state's sales or transaction threshold — most commonly $100,000 in annual sales. California, Texas, and New York impose a $500,000 threshold. Five states have no general state sales tax: Alaska, Delaware, Montana, New Hampshire, and Oregon.",
   exemption_certs: "Exemption certificates are documents provided by customers claiming they are exempt from sales tax — for example, resellers or exempt organizations. Without valid certificates on file, the seller may be liable for uncollected tax under audit.",
   use_tax_review: "Use tax applies when a company purchases goods or services without paying sales tax — for example, from an out-of-state vendor who did not charge tax. Companies are generally required to self-assess and remit use tax on these purchases.",
   employment_tax_states: "If employees live or work in states where the company does not file employment tax returns, the company may owe payroll taxes, unemployment insurance, and other withholding obligations in those states.",
@@ -498,15 +422,10 @@ const TOOLTIPS = {
 };
 
 // ── Resume-state computation ──────────────────────────────────────────────────
-// These pure functions replay the branching flow using saved answers and return
-// { finalState, history } where history is the stack of prior state snapshots
-// needed to power the Back button.
-
-// Full state snapshot — every flow field needed to restore a view.
 function blankSnap(overrides) {
   return {
     view: "question", questionId: "prior_reorg", questionNumber: 1,
-    stateSelectContext: null, selectedStates: [], stateSalesData: {},
+    stateSelectContext: null, selectedStates: [], stateSalesData: {}, combinedEstimate: "",
     equityInAssetPhase: false, equityOffset: 0,
     equityView: "entity-select", equityQuestionId: null,
     equityQuestionNum: 1, equityTotal: null, equityEntityType: null,
@@ -522,7 +441,7 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
   function snap(overrides) {
     return blankSnap({
       view: "question", questionId: qId, questionNumber: equityOffset + qNum,
-      stateSelectContext: null, selectedStates: [], stateSalesData: {},
+      stateSelectContext: null, selectedStates: [], stateSalesData: {}, combinedEstimate: "",
       equityInAssetPhase: inEquityAssetPhase, equityOffset,
       equityView: inEquityAssetPhase ? "question" : "entity-select",
       ...extraFields,
@@ -552,9 +471,6 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
       const { next: nextId, nextNumber: nextNum } = outcome;
       const stateCtx = { questionId: qId, nextId, nextNumber: nextNum };
       if (nextId !== "done" && a[nextId] !== undefined) {
-        // State-select was completed; push the yes/no question only — not the
-        // sub-steps, since we don't have the saved selections to restore them.
-        // (Going Back from the next question will return to this yes/no view.)
         qId = nextId;
         qNum = nextNum;
         continue;
@@ -587,7 +503,6 @@ function resumeEquity(a) {
 
   if (!entityType) return { finalState: entitySelectSnap, history: [] };
 
-  // entity-select is the first "prior" state for the first equity question
   const history = [entitySelectSnap];
   let equityTotal = EQUITY_BASE_TOTALS[entityType];
   let equityQuestionId = EQUITY_FIRST_QUESTION[entityType];
@@ -693,6 +608,7 @@ export default function Questionnaire() {
     setStateSelectContext(s.stateSelectContext);
     setSelectedStates(s.selectedStates ?? []);
     setStateSalesData(s.stateSalesData ?? {});
+    setCombinedEstimate(s.combinedEstimate ?? "");
     setEquityInAssetPhase(s.equityInAssetPhase);
     setEquityOffset(s.equityOffset);
     setEquityView(s.equityView);
@@ -705,7 +621,7 @@ export default function Questionnaire() {
   function captureSnapshot() {
     return {
       view, questionId, questionNumber, stateSelectContext,
-      selectedStates, stateSalesData,
+      selectedStates, stateSalesData, combinedEstimate,
       equityInAssetPhase, equityOffset,
       equityView, equityQuestionId, equityQuestionNum, equityTotal, equityEntityType,
     };
@@ -741,23 +657,19 @@ export default function Questionnaire() {
   }, [dealId]);
 
   // ── Asset flow state ─────────────────────────────────────────────────────
-  // view: "question" | "state-select" | "state-upload-preview" | "state-sales" | "done"
   const [view, setView] = useState("question");
   const [questionId, setQuestionId] = useState("prior_reorg");
   const [questionNumber, setQuestionNumber] = useState(1);
   const [stateSelectContext, setStateSelectContext] = useState(null);
   const [selectedStates, setSelectedStates] = useState([]);
   const [stateSalesData, setStateSalesData] = useState({});
-  const [uploadPreviewRows, setUploadPreviewRows] = useState([]);
-  const [uploadDetectedAny, setUploadDetectedAny] = useState(false);
-  const [uploadError, setUploadError] = useState("");
+  const [combinedEstimate, setCombinedEstimate] = useState("");
 
   // ── Equity flow state ────────────────────────────────────────────────────
-  // equityView: "entity-select" | "question" | "text-input"
   const [equityView, setEquityView] = useState("entity-select");
   const [equityQuestionId, setEquityQuestionId] = useState(null);
   const [equityQuestionNum, setEquityQuestionNum] = useState(1);
-  const [equityTotal, setEquityTotal] = useState(null); // set after entity type is chosen
+  const [equityTotal, setEquityTotal] = useState(null);
   const [equityInAssetPhase, setEquityInAssetPhase] = useState(false);
   const [equityOffset, setEquityOffset] = useState(0);
   const [textInputValue, setTextInputValue] = useState("");
@@ -765,18 +677,18 @@ export default function Questionnaire() {
   const [equityEntityType, setEquityEntityType] = useState(null);
 
   // ── Back navigation ──────────────────────────────────────────────────────
-  const [historyStack, setHistoryStack] = useState([]); // stack of state snapshots for Back
+  const [historyStack, setHistoryStack] = useState([]);
 
   // ── Shared ───────────────────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   // ── Progress bar ─────────────────────────────────────────────────────────
-  const isAsset = dealType === "asset";
+  const isAsset  = dealType === "asset";
   const isEquity = dealType === "equity";
-  const isDone = view === "done";
-  const progressNum = (isAsset || equityInAssetPhase) ? questionNumber : equityQuestionNum;
-  const progressTotal = isAsset ? 15 : equityTotal;
+  const isDone   = view === "done";
+  const progressNum   = (isAsset || equityInAssetPhase) ? questionNumber : equityQuestionNum;
+  const progressTotal = isAsset ? 16 : equityTotal;
   const progress = progressTotal ? Math.max(0, Math.round(((progressNum - 1) / progressTotal) * 100)) : 0;
   const GROSS_RECEIPTS_IDS = new Set([
     "gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3",
@@ -805,8 +717,7 @@ export default function Questionnaire() {
   // ── Asset handlers ───────────────────────────────────────────────────────
   async function handleAssetAnswer(answer) {
     if (!dealId) return;
-    setError("");
-    setSubmitting(true);
+    setError(""); setSubmitting(true);
     const snap = captureSnapshot();
     try {
       await postAnswer(questionId, answer);
@@ -816,16 +727,16 @@ export default function Questionnaire() {
         setStateSelectContext({ questionId, nextId: outcome.next, nextNumber: outcome.nextNumber });
         setSelectedStates([]);
         setStateSalesData({});
+        setCombinedEstimate("");
         setView("state-select");
       } else if (outcome.next === "done") {
         setView("done");
       } else {
-        let nextId = outcome.next;
+        let nextId  = outcome.next;
         let nextNum = outcome.nextNumber;
-        // For pure asset deals, insert gross_receipts block after prior_reorg/prior_diligence
         if (!equityInAssetPhase && nextId === "erc_claimed" &&
             (questionId === "prior_diligence" || questionId === "prior_reorg")) {
-          nextId = "gross_receipts_y1";
+          nextId  = "gross_receipts_y1";
           nextNum = questionNumber;
         }
         setQuestionId(nextId);
@@ -841,8 +752,7 @@ export default function Questionnaire() {
 
   async function handleAssetNumericSubmit() {
     if (!dealId) return;
-    setError("");
-    setSubmitting(true);
+    setError(""); setSubmitting(true);
     const snap = captureSnapshot();
     try {
       await postAnswer(questionId, numericInputValue.trim() || "0");
@@ -878,99 +788,41 @@ export default function Questionnaire() {
       return;
     }
     const initial = {};
-    for (const s of selectedStates) initial[s] = { year1: "", year2: "", year3: "" };
+    for (const s of selectedStates) initial[s] = { year1: "" };
     setStateSalesData(initial);
-    setView("state-sales");
-  }
-
-  function parseCsvFile(file) {
-    return new Promise((resolve, reject) => {
-      Papa.parse(file, {
-        header: false,
-        skipEmptyLines: true,
-        complete: (results) => resolve(results.data),
-        error: reject,
-      });
-    });
-  }
-
-  async function parseExcelFile(file) {
-    const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: "array" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-  }
-
-  async function handleSalesFileUpload(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setUploadError("");
-
-    const name = file.name.toLowerCase();
-    try {
-      let rows;
-      if (name.endsWith(".csv")) {
-        rows = await parseCsvFile(file);
-      } else if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-        rows = await parseExcelFile(file);
-      } else {
-        setUploadError("Please upload a .csv or .xlsx file.");
-        return;
-      }
-      const detected = detectStateSalesFromGrid(rows);
-      setUploadDetectedAny(detected.length > 0);
-      setUploadPreviewRows(detected.length > 0 ? detected : [{ state: "", year1: "", year2: "", year3: "" }]);
-      setView("state-upload-preview");
-    } catch (err) {
-      console.error("File parse error:", err);
-      setUploadDetectedAny(false);
-      setUploadPreviewRows([{ state: "", year1: "", year2: "", year3: "" }]);
-      setView("state-upload-preview");
-    }
-  }
-
-  function updateUploadPreviewRow(idx, field, value) {
-    setUploadPreviewRows((prev) => prev.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
-  }
-
-  function removeUploadPreviewRow(idx) {
-    setUploadPreviewRows((prev) => prev.filter((_, i) => i !== idx));
-  }
-
-  function addUploadPreviewRow() {
-    setUploadPreviewRows((prev) => [...prev, { state: "", year1: "", year2: "", year3: "" }]);
-  }
-
-  function applyUploadPreview() {
-    const valid = uploadPreviewRows.filter((r) => r.state && US_STATES.includes(r.state));
-    if (valid.length === 0) {
-      setUploadError("Select at least one state before continuing.");
-      return;
-    }
-    setUploadError("");
-    const states = [...new Set(valid.map((r) => r.state))];
-    const dataMap = {};
-    for (const r of valid) {
-      dataMap[r.state] = { year1: r.year1 || "", year2: r.year2 || "", year3: r.year3 || "" };
-    }
-    setSelectedStates(states);
-    setStateSalesData(dataMap);
+    setCombinedEstimate("");
     setView("state-sales");
   }
 
   async function handleStateSalesSubmit() {
     if (!dealId) return;
-    setError("");
-    setSubmitting(true);
+
+    // ≤12 states: all individual estimates required
+    if (selectedStates.length <= 12) {
+      const missing = selectedStates.some((s) => !(stateSalesData[s]?.year1 ?? "").trim());
+      if (missing) {
+        setError("Please enter an estimated annual sales amount for each state.");
+        return;
+      }
+    }
+
+    setError(""); setSubmitting(true);
     const snap = captureSnapshot();
     try {
-      const statesPayload = selectedStates.map((s) => ({
-        state: s,
-        year1: stateSalesData[s]?.year1 || "",
-        year2: stateSalesData[s]?.year2 || "",
-        year3: stateSalesData[s]?.year3 || "",
-      }));
+      const statesPayload = selectedStates
+        .filter((s) => (stateSalesData[s]?.year1 ?? "").trim() !== "")
+        .map((s) => ({ state: s, year1: stateSalesData[s].year1 }));
+
+      if ((combinedEstimate ?? "").trim() !== "") {
+        statesPayload.push({ state: "Other (combined)", year1: combinedEstimate });
+      }
+
+      if (statesPayload.length === 0) {
+        setError("Please enter at least one estimate or a combined estimate for remaining states.");
+        setSubmitting(false);
+        return;
+      }
+
       const res = await fetch("/api/state-sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -994,8 +846,7 @@ export default function Questionnaire() {
   // ── Equity handlers ──────────────────────────────────────────────────────
   async function handleEntityTypeSelect(entityType) {
     if (!dealId) return;
-    setError("");
-    setSubmitting(true);
+    setError(""); setSubmitting(true);
     const snap = captureSnapshot();
     try {
       await postAnswer("entity_type", entityType);
@@ -1014,15 +865,13 @@ export default function Questionnaire() {
 
   async function handleEquityAnswer(answer) {
     if (!dealId) return;
-    setError("");
-    setSubmitting(true);
+    setError(""); setSubmitting(true);
     const snap = captureSnapshot();
     try {
       await postAnswer(equityQuestionId, answer);
       setHistoryStack((h) => [...h, snap]);
       const q = EQUITY_QUESTIONS[equityQuestionId];
 
-      // Extend total when optional branching questions are triggered
       if (equityQuestionId === "scorp_converted_from_c" && answer === "yes") {
         setEquityTotal((prev) => prev + 1);
       }
@@ -1055,8 +904,7 @@ export default function Questionnaire() {
 
   async function handleEquityNumericSubmit() {
     if (!dealId) return;
-    setError("");
-    setSubmitting(true);
+    setError(""); setSubmitting(true);
     const snap = captureSnapshot();
     try {
       await postAnswer(equityQuestionId, numericInputValue.trim() || "0");
@@ -1066,7 +914,6 @@ export default function Questionnaire() {
         equityQuestionId === "officer_comp" ||
         (equityQuestionId === "taxable_income_y3" && equityEntityType !== "scorp");
       if (isLastFinancial) {
-        // Transition to asset phase
         setEquityOffset(equityQuestionNum);
         setEquityInAssetPhase(true);
         setView("question");
@@ -1078,7 +925,7 @@ export default function Questionnaire() {
         setEquityView("numeric-input");
       } else {
         const nextId = EQUITY_QUESTIONS[equityQuestionId]?.next;
-        const nextQ = EQUITY_QUESTIONS[nextId];
+        const nextQ  = EQUITY_QUESTIONS[nextId];
         setEquityQuestionId(nextId);
         setEquityQuestionNum((prev) => prev + 1);
         if (nextQ?.type === "numeric-input") setEquityView("numeric-input");
@@ -1093,8 +940,7 @@ export default function Questionnaire() {
 
   async function handleTextInputSubmit() {
     if (!dealId || !textInputValue.trim()) return;
-    setError("");
-    setSubmitting(true);
+    setError(""); setSubmitting(true);
     const snap = captureSnapshot();
     try {
       await postAnswer(equityQuestionId, textInputValue.trim());
@@ -1112,8 +958,12 @@ export default function Questionnaire() {
   }
 
   // ── Render helpers ───────────────────────────────────────────────────────
-  const currentAssetQ = QUESTIONS[questionId];
+  const currentAssetQ  = QUESTIONS[questionId];
   const currentEquityQ = equityQuestionId ? EQUITY_QUESTIONS[equityQuestionId] : null;
+
+  const stateSelectTitle = stateSelectContext?.questionId === "income_tax_nexus"
+    ? "Select all states where the Company has sales to customers but does not file income tax returns:"
+    : "Select all states where the Company has sales to customers but does not collect or remit sales and use tax:";
 
   const yesBtn = (onClick) => (
     <button
@@ -1177,7 +1027,7 @@ export default function Questionnaire() {
         ════════════════════════════════════════════════════ */}
         {(isAsset || equityInAssetPhase) && !isDone && (
           <>
-            {/* ── Asset: question (yes/no or numeric input) ── */}
+            {/* ── Asset: question (yes/no, choice, or numeric input) ── */}
             {view === "question" && currentAssetQ && (
               <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
                 {historyStack.length > 0 && (
@@ -1212,22 +1062,24 @@ export default function Questionnaire() {
                       {submitting ? "Saving…" : "Continue →"}
                     </button>
                   </>
+                ) : currentAssetQ.choices ? (
+                  <div className="flex flex-col gap-3">
+                    {currentAssetQ.choices.map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => handleAssetAnswer(value)}
+                        disabled={submitting || !dealId}
+                        className="w-full border-2 border-blue-200 hover:border-blue-600 hover:bg-blue-50 text-blue-700 font-medium py-3 rounded-lg transition-colors text-left px-4 disabled:opacity-50"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 ) : (
                   <>
-                    <div className="flex flex-col gap-3">
-                      <div className="flex gap-4">
-                        {yesBtn(() => handleAssetAnswer("yes"))}
-                        {noBtn(() => handleAssetAnswer("no"))}
-                      </div>
-                      {currentAssetQ.threeWay && (
-                        <button
-                          onClick={() => handleAssetAnswer("na")}
-                          disabled={submitting || !dealId}
-                          className="w-full text-sm text-gray-500 hover:text-blue-600 hover:bg-blue-50 py-2.5 rounded-lg border border-gray-200 hover:border-blue-200 transition-colors"
-                        >
-                          Independent contractors are not utilized.
-                        </button>
-                      )}
+                    <div className="flex gap-4">
+                      {yesBtn(() => handleAssetAnswer("yes"))}
+                      {noBtn(() => handleAssetAnswer("no"))}
                     </div>
                     {!dealId && (
                       <p className="text-xs text-gray-400 text-center mt-5">
@@ -1248,10 +1100,19 @@ export default function Questionnaire() {
                     ← Back
                   </button>
                 )}
-                <p className="text-gray-800 text-base font-medium mb-1">Select all applicable states:</p>
-                <p className="text-xs text-blue-400 mb-5">
-                  {selectedStates.length} state{selectedStates.length !== 1 ? "s" : ""} selected
-                </p>
+                <p className="text-gray-800 text-base font-medium mb-1">{stateSelectTitle}</p>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs text-blue-400">
+                    {selectedStates.length} state{selectedStates.length !== 1 ? "s" : ""} selected
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStates([...US_STATES])}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Select all states
+                  </button>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-6 max-h-80 overflow-y-auto pr-1">
                   {US_STATES.map((state) => {
                     const checked = selectedStates.includes(state);
@@ -1269,24 +1130,6 @@ export default function Questionnaire() {
                   })}
                 </div>
 
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="flex-1 border-t border-gray-200" />
-                  <span className="text-xs text-gray-400 uppercase tracking-wide">or</span>
-                  <div className="flex-1 border-t border-gray-200" />
-                </div>
-                <label className="w-full flex items-center justify-center gap-2 border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium py-2.5 rounded-lg cursor-pointer transition-colors mb-3 text-sm">
-                  Upload Sales Data (.csv or .xlsx)
-                  <input
-                    type="file"
-                    accept=".csv,.xlsx,.xls"
-                    onChange={handleSalesFileUpload}
-                    className="hidden"
-                  />
-                </label>
-                {uploadError && (
-                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2 mb-4">{uploadError}</p>
-                )}
-
                 <button
                   onClick={handleStateSelectContinue}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
@@ -1296,103 +1139,7 @@ export default function Questionnaire() {
               </div>
             )}
 
-            {/* ── Asset: Uploaded sales data preview (editable) ── */}
-            {view === "state-upload-preview" && (
-              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
-                <div
-                  className={`mb-5 rounded-lg px-4 py-3 text-sm border ${
-                    uploadDetectedAny
-                      ? "bg-blue-50 text-blue-700 border-blue-200"
-                      : "bg-amber-50 text-amber-700 border-amber-200"
-                  }`}
-                >
-                  {uploadDetectedAny
-                    ? "We've pre-filled your data from the uploaded file. Please review and correct anything below before continuing."
-                    : "We couldn't automatically read your file. You can enter your data manually in the table below or try uploading a different file."}
-                </div>
-
-                <div className="overflow-x-auto mb-3 max-h-96">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
-                        <th className="pb-2 pr-2">State</th>
-                        <th className="pb-2 pr-2">Year 1</th>
-                        <th className="pb-2 pr-2">Year 2</th>
-                        <th className="pb-2 pr-2">Year 3</th>
-                        <th className="pb-2" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {uploadPreviewRows.map((row, idx) => (
-                        <tr key={idx} className="border-t border-gray-100">
-                          <td className="py-2 pr-2 min-w-[160px]">
-                            <select
-                              value={row.state}
-                              onChange={(e) => updateUploadPreviewRow(idx, "state", e.target.value)}
-                              className="w-full border border-blue-200 rounded-lg px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                            >
-                              <option value="">Select state…</option>
-                              {US_STATES.map((s) => (
-                                <option key={s} value={s}>{s}</option>
-                              ))}
-                            </select>
-                          </td>
-                          {["year1", "year2", "year3"].map((yr) => (
-                            <td key={yr} className="py-2 pr-2 min-w-[100px]">
-                              <input
-                                type="number" min="0" placeholder="0"
-                                value={row[yr]}
-                                onChange={(e) => updateUploadPreviewRow(idx, yr, e.target.value)}
-                                className="w-full border border-blue-200 rounded-lg px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                              />
-                            </td>
-                          ))}
-                          <td className="py-2 pl-1">
-                            <button
-                              onClick={() => removeUploadPreviewRow(idx)}
-                              className="text-gray-400 hover:text-red-600 text-sm px-2"
-                              title="Remove row"
-                              type="button"
-                            >
-                              ✕
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <button
-                  onClick={addUploadPreviewRow}
-                  className="text-sm text-blue-600 hover:underline mb-6"
-                  type="button"
-                >
-                  + Add State
-                </button>
-
-                {uploadError && (
-                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2 mb-4">{uploadError}</p>
-                )}
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => { setUploadError(""); setView("state-select"); }}
-                    className="flex-1 border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium py-3 rounded-lg transition-colors"
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    onClick={applyUploadPreview}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
-                  >
-                    Use This Data →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── Asset: State sales inputs ── */}
+            {/* ── Asset: State sales estimate entry ── */}
             {view === "state-sales" && (
               <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
                 {historyStack.length > 0 && (
@@ -1400,30 +1147,45 @@ export default function Questionnaire() {
                     ← Back
                   </button>
                 )}
-                <p className="text-gray-800 text-base font-medium mb-1">Enter annual sales amounts ($) by state:</p>
-                <p className="text-xs text-blue-400 mb-6">Year 1 is most recent</p>
-                <div className="space-y-6 mb-6 max-h-96 overflow-y-auto pr-1">
+                <p className="text-gray-800 text-base font-medium mb-1">Enter estimated annual sales ($) by state:</p>
+
+                {selectedStates.length > 12 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800 mb-5">
+                    With more than 12 states selected, individual estimates may not be available for all states. Enter what you have — remaining states can be captured in the combined field below.
+                  </div>
+                )}
+
+                <div className="space-y-3 mb-5 max-h-96 overflow-y-auto pr-1">
                   {selectedStates.map((state) => (
-                    <div key={state}>
-                      <p className="text-sm font-semibold text-blue-700 mb-2">{state}</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        {["year1", "year2", "year3"].map((yr, i) => (
-                          <div key={yr}>
-                            <label className="text-xs text-gray-400 mb-1 block">Year {i + 1}</label>
-                            <input
-                              type="number" min="0" placeholder="0"
-                              value={stateSalesData[state]?.[yr] || ""}
-                              onChange={(e) =>
-                                setStateSalesData((prev) => ({ ...prev, [state]: { ...prev[state], [yr]: e.target.value } }))
-                              }
-                              className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                            />
-                          </div>
-                        ))}
-                      </div>
+                    <div key={state} className="flex items-center gap-3">
+                      <label className="text-sm text-gray-700 w-44 flex-shrink-0">{state}</label>
+                      <input
+                        type="number" min="0"
+                        placeholder={selectedStates.length <= 12 ? "Required" : "Optional"}
+                        value={stateSalesData[state]?.year1 || ""}
+                        onChange={(e) =>
+                          setStateSalesData((prev) => ({ ...prev, [state]: { year1: e.target.value } }))
+                        }
+                        className="flex-1 border border-blue-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      />
                     </div>
                   ))}
                 </div>
+
+                {selectedStates.length > 12 && (
+                  <div className="border-t border-gray-100 pt-5 mb-5">
+                    <p className="text-sm font-semibold text-blue-700 mb-1">All remaining selected states — combined estimate</p>
+                    <p className="text-xs text-gray-400 mb-2">Enter a combined annual sales total for all states where you did not enter individual amounts above.</p>
+                    <input
+                      type="number" min="0"
+                      placeholder="Combined annual sales estimate"
+                      value={combinedEstimate}
+                      onChange={(e) => setCombinedEstimate(e.target.value)}
+                      className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    />
+                  </div>
+                )}
+
                 {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2 mb-4">{error}</p>}
                 <button
                   onClick={handleStateSalesSubmit}

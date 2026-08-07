@@ -1,8 +1,20 @@
 import { Pool } from "pg";
+import { getThreshold, NO_SALES_TAX_STATES } from "../../lib/nexusThresholds";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-function computeRisks(answers) {
+function parseNum(val) {
+  if (val == null || val === "") return null;
+  const n = parseFloat(String(val).replace(/[^0-9.-]/g, ""));
+  return isNaN(n) ? null : n;
+}
+
+function fmtCurrency(n) {
+  if (n == null) return "—";
+  return Number(n).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+}
+
+function computeRisks(answers, stateSalesRows) {
   const a = {};
   for (const row of answers) a[row.question_id] = row.answer;
 
@@ -36,15 +48,58 @@ function computeRisks(answers) {
     add("Federal Tax", "Low risk. The Company has related party transactions conducted at fair market value. Recommend confirming that contemporaneous documentation exists to support FMV pricing in the event of an audit.", "low");
 
   // ── State Income Tax ─────────────────────────────────────────────────────
-  if (a.income_tax_nexus === "yes")
-    add("State Income Tax", "Risk that the Company may have state income tax filing obligations in states where it has sales. Applicability depends on the volume of sales, the nature of the business activity, and whether P.L. 86-272 protections apply. Review sales by state to assess nexus exposure and quantify potential liability.", "moderate");
+  if (a.income_tax_nexus === "yes") {
+    let pl272 = "";
+    if (a.revenue_type === "goods") {
+      pl272 = " Note that P.L. 86-272 may limit state income tax exposure in states where the Company's only in-state activity is the solicitation of orders for the sale of tangible goods, subject to state-specific limitations. Where P.L. 86-272 applies, states cannot impose net income tax on the Company's in-state sales.";
+    } else if (a.revenue_type === "services" || a.revenue_type === "both") {
+      pl272 = " P.L. 86-272 protections do not extend to service revenue. States where the Company sells services may assert income tax nexus on the full amount of sales attributable to that state.";
+    }
+    add("State Income Tax",
+      "Risk that the Company may have state income tax filing obligations in states where it has sales to customers but does not file returns. Applicability depends on whether the Company has exceeded economic nexus thresholds adopted by each state following South Dakota v. Wayfair." + pl272,
+      "moderate");
+  }
 
   if (a.physical_nexus === "yes")
     add("State Income Tax", "Risk that physical presence in states where the Company does not currently file may create state income tax filing obligations. For C corporations, exposure is estimated using a blended state rate applied to apportioned income. For pass-through entities, exposure is estimated using an apportionment formula at the owner level. Recommend reviewing employee locations, contractor locations, and property situs by state.", "moderate");
 
   // ── Sales & Use Tax ──────────────────────────────────────────────────────
-  if (a.sales_tax_nexus === "yes")
-    add("Sales & Use Tax", "Risk that the Company may have sales and use tax filing obligations in states where it has sales. Applicability depends on whether the Company has crossed economic nexus thresholds, which vary by state but are commonly $100,000 in sales or 200 transactions annually. Review sales by state to identify states where nexus may exist.", "moderate");
+  if (a.sales_tax_nexus === "yes") {
+    const stRows      = (stateSalesRows || []).filter((r) => r.question_id === "sales_tax_nexus");
+    const individualRows = stRows.filter((r) => r.state !== "Other (combined)");
+    const combinedRow    = stRows.find((r)  => r.state === "Other (combined)");
+
+    const aboveThreshold = [];
+    const belowThreshold = [];
+    const noSalesTaxList = [];
+
+    for (const row of individualRows) {
+      if (NO_SALES_TAX_STATES.has(row.state)) {
+        noSalesTaxList.push(row.state);
+      } else {
+        const amount = parseNum(row.year_1) || 0;
+        if (amount >= getThreshold(row.state)) aboveThreshold.push(row.state);
+        else belowThreshold.push(row.state);
+      }
+    }
+
+    let text = "Risk that the Company may have sales and use tax collection and remittance obligations in states where it has sales to customers. Applicability depends on whether the Company has crossed economic nexus thresholds, which vary by state.";
+
+    if (aboveThreshold.length > 0) {
+      text += ` Based on estimated annual sales provided, the following states appear to meet or exceed their applicable economic nexus threshold: ${aboveThreshold.join(", ")}.`;
+    }
+    if (belowThreshold.length > 0) {
+      text += ` The following states were selected but reported sales fall below the applicable threshold based on information provided: ${belowThreshold.join(", ")}. Nexus may still exist if transaction counts exceed applicable thresholds or if sales increase in a subsequent period.`;
+    }
+    if (noSalesTaxList.length > 0) {
+      text += ` The following selected states do not impose a general state sales tax and are not expected to have a sales tax filing obligation: ${noSalesTaxList.join(", ")}.`;
+    }
+    if (combinedRow) {
+      text += ` A combined estimate of ${fmtCurrency(combinedRow.year_1)} was provided for remaining states. Specific threshold analysis is not available for the combined bucket; recommend obtaining state-level sales detail to refine this analysis.`;
+    }
+
+    add("Sales & Use Tax", text, "moderate");
+  }
 
   if (a.exemption_certs === "no")
     add("Sales & Use Tax", "Risk that undocumented exempt sales will be presumed taxable under audit and assessed against the Company with penalties and interest. Recommend implementing a process to collect and periodically refresh exemption certificates from all customers claiming exemption.", "moderate");
@@ -136,7 +191,7 @@ export default async function handler(req, res) {
         [dealId]
       ),
       pool.query(
-        "SELECT state, year_1, year_2, year_3 FROM state_sales WHERE deal_id = $1 ORDER BY state ASC",
+        "SELECT question_id, state, year_1, year_2, year_3 FROM state_sales WHERE deal_id = $1 ORDER BY state ASC",
         [dealId]
       ),
       pool.query(
@@ -150,7 +205,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       deal: dealResult.rows[0],
-      risks: computeRisks(answersResult.rows),
+      risks: computeRisks(answersResult.rows, salesResult.rows),
       answers: answersResult.rows,
       stateSales: salesResult.rows,
       incomeTaxSales: incomeTaxSalesResult.rows,

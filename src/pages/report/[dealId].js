@@ -737,15 +737,18 @@ export default function ReportPage() {
           <div className="report-section">
             <h2 className="section-heading">Appendix A: State Sales Data</h2>
             <p className="body-para" style={{ marginBottom: "18px" }}>
-              The following state-level sales figures were provided as part of the diligence intake process.
+              The following estimated annual sales figures were provided as part of the diligence intake process and are used as inputs to the exposure calculations in this report.
             </p>
+            {stateSales.some((r) => r.state === "Other (combined)") && (
+              <p className="body-para" style={{ marginBottom: "18px", fontStyle: "italic" }}>
+                Note: A combined estimate was provided for certain states where individual data was not available. Specific threshold analysis is not possible for the combined bucket; recommend obtaining state-level sales detail to refine exposure estimates.
+              </p>
+            )}
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="th" style={{ width: "32%" }}>State</th>
-                  <th className="th">Year 1</th>
-                  <th className="th">Year 2</th>
-                  <th className="th">Year 3</th>
+                  <th className="th" style={{ width: "45%" }}>State</th>
+                  <th className="th">Estimated Annual Sales</th>
                 </tr>
               </thead>
               <tbody>
@@ -753,8 +756,6 @@ export default function ReportPage() {
                   <tr key={i}>
                     <td className="td">{row.state}</td>
                     <td className="td">{fmtCurrency(row.year_1)}</td>
-                    <td className="td">{fmtCurrency(row.year_2)}</td>
-                    <td className="td">{fmtCurrency(row.year_3)}</td>
                   </tr>
                 ))}
               </tbody>

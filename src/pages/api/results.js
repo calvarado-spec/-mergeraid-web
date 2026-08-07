@@ -36,15 +36,22 @@ function computeRisks(answers) {
     add("Federal Tax", "Low risk. The Company has related party transactions conducted at fair market value. Recommend confirming that contemporaneous documentation exists to support FMV pricing in the event of an audit.", "low");
 
   // ── State Income Tax ─────────────────────────────────────────────────────
-  if (a.income_tax_nexus === "yes")
-    add("State Income Tax", "Risk that the Company may have state income tax filing obligations in states where it has sales. Applicability depends on the volume of sales, the nature of the business activity, and whether P.L. 86-272 protections apply. Review sales by state to assess nexus exposure and quantify potential liability.", "moderate");
+  if (a.income_tax_nexus === "yes") {
+    let itText = "Risk that the Company may have state income tax filing obligations in states where it has sales to customers but does not file returns. Applicability depends on whether the Company has exceeded economic nexus thresholds adopted by each state following South Dakota v. Wayfair.";
+    if (a.revenue_type === "goods") {
+      itText += " Note that P.L. 86-272 may limit income tax exposure in states where the Company's only in-state activity is the solicitation of orders for tangible goods, subject to state-specific limitations.";
+    } else if (a.revenue_type === "services" || a.revenue_type === "both") {
+      itText += " P.L. 86-272 protections do not extend to service revenue; income tax nexus exposure applies to all states where the Company has sales without a filing obligation.";
+    }
+    add("State Income Tax", itText, "moderate");
+  }
 
   if (a.physical_nexus === "yes")
     add("State Income Tax", "Risk that physical presence in states where the Company does not currently file may create state income tax filing obligations. For C corporations, exposure is estimated using a blended state rate applied to apportioned income. For pass-through entities, exposure is estimated using an apportionment formula at the owner level. Recommend reviewing employee locations, contractor locations, and property situs by state.", "moderate");
 
   // ── Sales & Use Tax ──────────────────────────────────────────────────────
   if (a.sales_tax_nexus === "yes")
-    add("Sales & Use Tax", "Risk that the Company may have sales and use tax filing obligations in states where it has sales. Applicability depends on whether the Company has crossed economic nexus thresholds, which vary by state but are commonly $100,000 in sales or 200 transactions annually. Review sales by state to identify states where nexus may exist.", "moderate");
+    add("Sales & Use Tax", "Risk that the Company may have sales and use tax collection and remittance obligations in states where it has sales to customers. Applicability depends on whether the Company has crossed economic nexus thresholds, which vary by state but are most commonly $100,000 in annual sales. California, Texas, and New York impose a $500,000 threshold. Alaska, Delaware, Montana, New Hampshire, and Oregon do not impose a general state sales tax. Review sales by state to confirm threshold status and identify states where nexus is established.", "moderate");
 
   if (a.exemption_certs === "no")
     add("Sales & Use Tax", "Risk that undocumented exempt sales will be presumed taxable under audit and assessed against the Company with penalties and interest. Recommend implementing a process to collect and periodically refresh exemption certificates from all customers claiming exemption.", "moderate");
