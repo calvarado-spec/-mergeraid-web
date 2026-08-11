@@ -53,8 +53,11 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
     }
   }
 
-  // ── 2. ERC Recapture ──────────────────────────────────────────────────────
-  if (a.erc_claimed === "yes") {
+  // ── 2. ERC Recapture — only when statute is still open ───────────────────
+  if (
+    a.erc_claimed === "yes" &&
+    (a.erc_q3_2021 === "yes" || a.erc_received_2yr === "yes")
+  ) {
     const erc = parseNum(a.erc_amount);
     if (erc !== null && erc > 0) {
       exposures.push({
@@ -70,7 +73,7 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
   // ── 3. Reasonable Compensation (S Corp only) ──────────────────────────────
   if (a.entity_type === "scorp") {
     const comp = parseNum(a.officer_comp);
-    if (comp !== null) {
+    if (comp !== null && comp < 250000) {
       const lowShortfall  = Math.max(0, 150000 - comp);
       const highShortfall = Math.max(0, 250000 - comp);
       const lowExposure   = lowShortfall  * 0.153;
@@ -89,8 +92,18 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
 
   // ── 4. Contractor Misclassification ───────────────────────────────────────
   if (a.contractor_usage === "yes" && a.contractor_classification === "no") {
-    const count = parseNum(a.contractor_count);
-    if (count !== null && count > 0) {
+    const comp  = parseNum(a.contractor_comp);
+    const count = parseNum(a.contractor_count); // fallback for existing deals
+
+    if (comp !== null && comp > 0) {
+      exposures.push({
+        category: "Employment Tax – Misclassification",
+        description: "Estimated payroll tax exposure if independent contractors are reclassified as employees",
+        lowEstimate: comp * 0.153 * 0.25,
+        highEstimate: comp * 0.153 * 0.50,
+        basis: "Reported individual contractor compensation × 15.3% employment taxes × 25%–50% audit adjustment factor, representing partial reclassification. Assumes the reported year is representative; assessments typically cover a 3-year lookback.",
+      });
+    } else if (count !== null && count > 0) {
       exposures.push({
         category: "Employment Tax – Misclassification",
         description: "Estimated payroll tax exposure if independent contractors are reclassified as employees",

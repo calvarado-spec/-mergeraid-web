@@ -17,6 +17,9 @@ const US_STATES = [
   "West Virginia", "Wisconsin", "Wyoming", "District of Columbia",
 ];
 
+const SALES_YEAR = new Date().getFullYear() - 1;
+const CURRENT_YEAR = new Date().getFullYear();
+
 // ── Asset deal: 16-question flow ─────────────────────────────────────────────
 const QUESTIONS = {
   prior_reorg: {
@@ -100,24 +103,24 @@ const QUESTIONS = {
       { value: "both",     label: "Both goods and services" },
     ],
     outcomes: {
-      goods:    { next: "income_tax_nexus", nextNumber: 7 },
-      services: { next: "income_tax_nexus", nextNumber: 7 },
-      both:     { next: "income_tax_nexus", nextNumber: 7 },
-    },
-  },
-  income_tax_nexus: {
-    number: 7,
-    text: "Does the Company have sales to customers in states where it does not file state income tax returns?",
-    outcomes: {
-      yes: { stateSelect: true, next: "physical_nexus", nextNumber: 8 },
-      no:  { next: "physical_nexus", nextNumber: 8 },
+      goods:    { next: "physical_nexus", nextNumber: 7 },
+      services: { next: "physical_nexus", nextNumber: 7 },
+      both:     { next: "physical_nexus", nextNumber: 7 },
     },
   },
   physical_nexus: {
-    number: 8,
+    number: 7,
     text: "Does the Company have any presence outside of states where they currently file? This includes employees, contractors, or property in those states.",
     outcomes: {
-      yes: { risk: true, next: "taxable_sales", nextNumber: 9 },
+      yes: { risk: true, next: "income_tax_nexus", nextNumber: 8 },
+      no:  { next: "income_tax_nexus", nextNumber: 8 },
+    },
+  },
+  income_tax_nexus: {
+    number: 8,
+    text: "Does the Company have sales to customers in states where it does not file state income tax returns?",
+    outcomes: {
+      yes: { stateSelect: true, next: "taxable_sales", nextNumber: 9 },
       no:  { next: "taxable_sales", nextNumber: 9 },
     },
   },
@@ -126,7 +129,7 @@ const QUESTIONS = {
     text: "Does the Company make taxable sales of tangible goods or services for sales tax purposes?",
     outcomes: {
       yes: { next: "sales_tax_nexus", nextNumber: 9 },
-      no:  { next: "exemption_certs", nextNumber: 10 },
+      no:  { next: "use_tax_review",  nextNumber: 11 },
     },
   },
   sales_tax_nexus: {
@@ -173,8 +176,8 @@ const QUESTIONS = {
     number: 14,
     text: "Does the Company have a process in place to differentiate whether an independent contractor should be considered an employee?",
     outcomes: {
-      yes: { next: "contractor_count", nextNumber: 14 },
-      no:  { risk: true, next: "contractor_count", nextNumber: 14 },
+      yes: { next: "contractor_comp", nextNumber: 14 },
+      no:  { risk: true, next: "contractor_comp", nextNumber: 14 },
     },
   },
   property_tax: {
@@ -194,6 +197,13 @@ const QUESTIONS = {
     },
   },
   // ── Financial input questions (asset flow) ────────────────────────────────
+  most_recent_filed_year: {
+    number: 0, type: "numeric-input",
+    text: "Enter the most recently filed tax return year:",
+    placeholder: "e.g. 2024",
+    helperNote: "Enter the calendar year of the Company's most recently filed federal income tax return. This is used to label the gross receipts and taxable income fields.",
+    next: "gross_receipts_y1", nextNumber: 0,
+  },
   gross_receipts_y1: {
     number: 0, type: "numeric-input",
     text: "Gross Receipts – Year 1 of Review Period",
@@ -239,10 +249,11 @@ const QUESTIONS = {
     placeholder: "e.g. 250000",
     next: "tax_exam", nextNumber: 4,
   },
-  contractor_count: {
+  contractor_comp: {
     number: 14, type: "numeric-input",
-    text: "Approximate Number of Regular 1099 Contractors",
-    placeholder: "e.g. 5",
+    text: "Approximate total annual compensation paid to individual independent contractors (most recent year)",
+    placeholder: "e.g. 250000",
+    helperNote: "Include only payments to individuals reported on Form 1099. Exclude payments to incorporated businesses, staffing agencies, or firms.",
     next: "property_tax", nextNumber: 15,
   },
 };
@@ -325,9 +336,15 @@ const EQUITY_QUESTIONS = {
   },
   eq_utp: {
     text: "Does the company have any uncertain tax positions reflected on the balance sheet?",
-    next: "gross_receipts_y1",
+    next: "most_recent_filed_year",
   },
   // ── Financial input questions (equity flow) ───────────────────────────────
+  most_recent_filed_year: {
+    text: "Enter the most recently filed tax return year:",
+    type: "numeric-input", placeholder: "e.g. 2024",
+    helperNote: "Enter the calendar year of the Company's most recently filed federal income tax return. This is used to label the gross receipts and taxable income fields.",
+    next: "gross_receipts_y1",
+  },
   gross_receipts_y1: {
     text: "Gross Receipts – Year 1 of Review Period",
     type: "numeric-input", placeholder: "e.g. 5000000",
@@ -387,7 +404,7 @@ const TOOLTIPS = {
   related_party: "Related party transactions are dealings between the company and its owners, officers, affiliates, or other connected parties — for example, rent paid to a shareholder-owned entity or loans between related companies.",
   related_party_fmv: "Fair market value means the price that would be agreed upon between unrelated parties in an arm's length transaction. Related party transactions not at FMV may be recharacterized by the IRS, creating additional tax exposure.",
   revenue_type: "The nature of the Company's revenue affects the availability of P.L. 86-272 protections. Under P.L. 86-272, a company that only solicits orders for tangible goods in a state may be protected from state net income tax even if it has economic nexus there. This protection does not apply to service revenue.",
-  income_tax_nexus: "Economic nexus for income tax purposes is triggered when a company's sales into a state exceed a threshold — often $50,000 to $500,000 depending on the state — even without any physical presence. Most states adopted economic nexus standards following the Supreme Court's decision in South Dakota v. Wayfair (2018).",
+  income_tax_nexus: "Economic nexus standards for income tax vary widely — several states apply a bright-line threshold (commonly $500,000 in annual sales), while others assert nexus at any level of purposeful, regular sales into the state. Most states adopted economic nexus standards following South Dakota v. Wayfair (2018).",
   physical_nexus: "Physical presence nexus is created when a company has employees, contractors, inventory, equipment, or other property in a state. This generally requires the company to file income tax returns in that state.",
   taxable_sales: "Taxable sales are sales of tangible personal property or certain services that are subject to sales tax. Not all sales are taxable — for example, sales for resale or certain exempt services may not be.",
   sales_tax_nexus: "Sales tax economic nexus is triggered by exceeding a state's sales or transaction threshold — most commonly $100,000 in annual sales. California, Texas, and New York impose a $500,000 threshold. Five states have no general state sales tax: Alaska, Delaware, Montana, New Hampshire, and Oregon.",
@@ -429,6 +446,7 @@ function blankSnap(overrides) {
     equityInAssetPhase: false, equityOffset: 0,
     equityView: "entity-select", equityQuestionId: null,
     equityQuestionNum: 1, equityTotal: null, equityEntityType: null,
+    filedYear: null,
     ...overrides,
   };
 }
@@ -437,6 +455,8 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
   const history = [];
   let qId = "prior_reorg";
   let qNum = startQNum;
+  // Inherit filedYear from equity phase if passed; pure-asset sets it on encounter
+  let replayFiledYear = extraFields?.filedYear ?? null;
 
   function snap(overrides) {
     return blankSnap({
@@ -444,6 +464,7 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
       stateSelectContext: null, selectedStates: [], stateSalesData: {}, combinedEstimate: "",
       equityInAssetPhase: inEquityAssetPhase, equityOffset,
       equityView: inEquityAssetPhase ? "question" : "entity-select",
+      filedYear: replayFiledYear,
       ...extraFields,
       ...overrides,
     });
@@ -456,6 +477,10 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
 
     history.push(snap());
     const ans = a[qId];
+
+    if (qId === "most_recent_filed_year") {
+      replayFiledYear = parseInt(ans) || null;
+    }
 
     if (q.type === "numeric-input") {
       if (!q.next || q.next === "done") return { finalState: blankSnap({ view: "done" }), history };
@@ -483,10 +508,10 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
     let nextId = outcome.next;
     let nextNum = outcome.nextNumber;
 
-    // Pure-asset flow only: inject gross_receipts block before erc_claimed
+    // Pure-asset flow only: inject most_recent_filed_year before financial inputs
     if (!inEquityAssetPhase && nextId === "erc_claimed" &&
         (qId === "prior_reorg" || qId === "prior_diligence")) {
-      nextId = "gross_receipts_y1";
+      nextId = "most_recent_filed_year";
       nextNum = qNum;
     }
 
@@ -507,11 +532,13 @@ function resumeEquity(a) {
   let equityTotal = EQUITY_BASE_TOTALS[entityType];
   let equityQuestionId = EQUITY_FIRST_QUESTION[entityType];
   let equityQuestionNum = 2;
+  let replayFiledYear = null;
 
   function equitySnap(overrides) {
     return blankSnap({
       equityView: "question", equityQuestionId, equityQuestionNum,
       equityTotal, equityEntityType: entityType,
+      filedYear: replayFiledYear,
       ...overrides,
     });
   }
@@ -530,6 +557,10 @@ function resumeEquity(a) {
     history.push(equitySnap({ equityView }));
     const ans = a[equityQuestionId];
 
+    if (equityQuestionId === "most_recent_filed_year") {
+      replayFiledYear = parseInt(ans) || null;
+    }
+
     if (equityQuestionId === "scorp_converted_from_c" && ans === "yes") equityTotal += 1;
     if (equityQuestionId === "ccorp_nol" && ans === "yes") equityTotal += 1;
 
@@ -539,7 +570,7 @@ function resumeEquity(a) {
 
     if (isLastFinancial) {
       const equityOffset = equityQuestionNum;
-      const extra = { equityView: "question", equityQuestionId, equityQuestionNum, equityTotal, equityEntityType: entityType };
+      const extra = { equityView: "question", equityQuestionId, equityQuestionNum, equityTotal, equityEntityType: entityType, filedYear: replayFiledYear };
       const { finalState, history: ah } = resumeAsset(a, true, equityOffset, equityQuestionNum + 1, extra);
       return {
         finalState: { ...finalState, equityTotal, equityEntityType: entityType, equityOffset, equityInAssetPhase: true },
@@ -557,7 +588,7 @@ function resumeEquity(a) {
 
     if (!nextId || !EQUITY_QUESTIONS[nextId]) {
       const equityOffset = equityQuestionNum;
-      const extra = { equityView: "question", equityQuestionId, equityQuestionNum, equityTotal, equityEntityType: entityType };
+      const extra = { equityView: "question", equityQuestionId, equityQuestionNum, equityTotal, equityEntityType: entityType, filedYear: replayFiledYear };
       const { finalState, history: ah } = resumeAsset(a, true, equityOffset, equityQuestionNum + 1, extra);
       return {
         finalState: { ...finalState, equityTotal, equityEntityType: entityType, equityOffset, equityInAssetPhase: true },
@@ -616,6 +647,7 @@ export default function Questionnaire() {
     setEquityQuestionNum(s.equityQuestionNum);
     setEquityTotal(s.equityTotal);
     setEquityEntityType(s.equityEntityType);
+    setFiledYear(s.filedYear ?? null);
   }
 
   function captureSnapshot() {
@@ -624,6 +656,7 @@ export default function Questionnaire() {
       selectedStates, stateSalesData, combinedEstimate,
       equityInAssetPhase, equityOffset,
       equityView, equityQuestionId, equityQuestionNum, equityTotal, equityEntityType,
+      filedYear,
     };
   }
 
@@ -665,6 +698,9 @@ export default function Questionnaire() {
   const [stateSalesData, setStateSalesData] = useState({});
   const [combinedEstimate, setCombinedEstimate] = useState("");
 
+  // ── Filed year (for dynamic GR/TI labels) ────────────────────────────────
+  const [filedYear, setFiledYear] = useState(null);
+
   // ── Equity flow state ────────────────────────────────────────────────────
   const [equityView, setEquityView] = useState("entity-select");
   const [equityQuestionId, setEquityQuestionId] = useState(null);
@@ -683,6 +719,22 @@ export default function Questionnaire() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  // ── Dynamic label helper ─────────────────────────────────────────────────
+  function getDynLabel(qId, q) {
+    if (filedYear) {
+      const yr = parseInt(filedYear);
+      if (!isNaN(yr)) {
+        if (qId === "gross_receipts_y1") return `Gross Receipts – ${yr}`;
+        if (qId === "gross_receipts_y2") return `Gross Receipts – ${yr - 1}`;
+        if (qId === "gross_receipts_y3") return `Gross Receipts – ${yr - 2}`;
+        if (qId === "taxable_income_y1") return `Taxable Income – ${yr}`;
+        if (qId === "taxable_income_y2") return `Taxable Income – ${yr - 1}`;
+        if (qId === "taxable_income_y3") return `Taxable Income – ${yr - 2}`;
+      }
+    }
+    return q.text;
+  }
+
   // ── Progress bar ─────────────────────────────────────────────────────────
   const isAsset  = dealType === "asset";
   const isEquity = dealType === "equity";
@@ -691,6 +743,7 @@ export default function Questionnaire() {
   const progressTotal = isAsset ? 16 : equityTotal;
   const progress = progressTotal ? Math.max(0, Math.round(((progressNum - 1) / progressTotal) * 100)) : 0;
   const GROSS_RECEIPTS_IDS = new Set([
+    "most_recent_filed_year",
     "gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3",
     "taxable_income_y1", "taxable_income_y2", "taxable_income_y3",
   ]);
@@ -736,7 +789,7 @@ export default function Questionnaire() {
         let nextNum = outcome.nextNumber;
         if (!equityInAssetPhase && nextId === "erc_claimed" &&
             (questionId === "prior_diligence" || questionId === "prior_reorg")) {
-          nextId  = "gross_receipts_y1";
+          nextId  = "most_recent_filed_year";
           nextNum = questionNumber;
         }
         setQuestionId(nextId);
@@ -752,11 +805,27 @@ export default function Questionnaire() {
 
   async function handleAssetNumericSubmit() {
     if (!dealId) return;
-    setError(""); setSubmitting(true);
+    setError("");
+
+    // Validate most_recent_filed_year
+    if (questionId === "most_recent_filed_year") {
+      const yr = parseInt(numericInputValue.trim());
+      if (isNaN(yr) || yr < 2015 || yr > CURRENT_YEAR) {
+        setError(`Please enter a valid 4-digit year between 2015 and ${CURRENT_YEAR}.`);
+        return;
+      }
+    }
+
+    setSubmitting(true);
     const snap = captureSnapshot();
     try {
       await postAnswer(questionId, numericInputValue.trim() || "0");
       setHistoryStack((h) => [...h, snap]);
+
+      if (questionId === "most_recent_filed_year") {
+        setFiledYear(parseInt(numericInputValue.trim()) || null);
+      }
+
       const q = QUESTIONS[questionId];
       setNumericInputValue("");
       if (q.next === "done") {
@@ -904,11 +973,27 @@ export default function Questionnaire() {
 
   async function handleEquityNumericSubmit() {
     if (!dealId) return;
-    setError(""); setSubmitting(true);
+    setError("");
+
+    // Validate most_recent_filed_year
+    if (equityQuestionId === "most_recent_filed_year") {
+      const yr = parseInt(numericInputValue.trim());
+      if (isNaN(yr) || yr < 2015 || yr > CURRENT_YEAR) {
+        setError(`Please enter a valid 4-digit year between 2015 and ${CURRENT_YEAR}.`);
+        return;
+      }
+    }
+
+    setSubmitting(true);
     const snap = captureSnapshot();
     try {
       await postAnswer(equityQuestionId, numericInputValue.trim() || "0");
       setHistoryStack((h) => [...h, snap]);
+
+      if (equityQuestionId === "most_recent_filed_year") {
+        setFiledYear(parseInt(numericInputValue.trim()) || null);
+      }
+
       setNumericInputValue("");
       const isLastFinancial =
         equityQuestionId === "officer_comp" ||
@@ -1036,7 +1121,7 @@ export default function Questionnaire() {
                   </button>
                 )}
                 <p className="text-gray-800 text-base font-medium leading-relaxed mb-6">
-                  {currentAssetQ.text}
+                  {getDynLabel(questionId, currentAssetQ)}
                   {!currentAssetQ.type && <TooltipIcon text={TOOLTIPS[questionId]} />}
                 </p>
                 {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2 mb-4">{error}</p>}
@@ -1155,10 +1240,14 @@ export default function Questionnaire() {
                   </div>
                 )}
 
-                <div className="space-y-3 mb-5 max-h-96 overflow-y-auto pr-1">
+                <div className="space-y-4 mb-5 max-h-96 overflow-y-auto pr-1">
                   {selectedStates.map((state) => (
-                    <div key={state} className="flex items-center gap-3">
-                      <label className="text-sm text-gray-700 w-44 flex-shrink-0">{state}</label>
+                    <div key={state}>
+                      <label className="block text-xs text-gray-500 mb-1">
+                        Estimated annual sales to customers in{" "}
+                        <span className="font-semibold text-gray-700">{state}</span>{" "}
+                        (most recent completed calendar year: {SALES_YEAR})
+                      </label>
                       <input
                         type="number" min="0"
                         placeholder={selectedStates.length <= 12 ? "Required" : "Optional"}
@@ -1166,7 +1255,7 @@ export default function Questionnaire() {
                         onChange={(e) =>
                           setStateSalesData((prev) => ({ ...prev, [state]: { year1: e.target.value } }))
                         }
-                        className="flex-1 border border-blue-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
                       />
                     </div>
                   ))}
@@ -1266,7 +1355,7 @@ export default function Questionnaire() {
                   </button>
                 )}
                 <p className="text-gray-800 text-base font-medium leading-relaxed mb-6">
-                  {currentEquityQ.text}
+                  {getDynLabel(equityQuestionId, currentEquityQ)}
                 </p>
                 <input
                   type="number"

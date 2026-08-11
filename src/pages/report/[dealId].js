@@ -53,6 +53,8 @@ const CATEGORIES_ORDER = [
   "Unclaimed Property",
 ];
 
+const SEVERITY_ORDER = { high: 0, moderate: 1, low: 2 };
+
 function fmtExp(n) {
   return "$" + Math.round(n).toLocaleString("en-US");
 }
@@ -322,6 +324,14 @@ const STYLES = `
     color: #2e7d32;
     margin: 28px 0 12px;
   }
+  .appendix-sub-heading {
+    font-family: Georgia, serif;
+    font-size: 13pt;
+    color: #1e3a5f;
+    margin: 28px 0 10px;
+    border-bottom: 1px solid #bfcfdf;
+    padding-bottom: 5px;
+  }
 
   /* ── Print ──────────────────────────────────────────────── */
   @media screen and (max-width: 640px) {
@@ -421,6 +431,10 @@ export default function ReportPage() {
   const recommendations = risks.filter((r) => r.severity === "recommendation");
   const activeRisks = risks.filter((r) => r.severity !== "recommendation");
 
+  const sortedActiveRisks = [...activeRisks].sort(
+    (a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3)
+  );
+
   const risksByCategory = {};
   for (const risk of activeRisks) {
     if (!risksByCategory[risk.category]) risksByCategory[risk.category] = [];
@@ -444,6 +458,11 @@ export default function ReportPage() {
     day: "numeric",
     year: "numeric",
   });
+
+  // Appendix A — split by question_id
+  const incomeTaxSalesRows = (stateSales || []).filter((r) => r.question_id === "income_tax_nexus");
+  const salesTaxSalesRows  = (stateSales || []).filter((r) => r.question_id === "sales_tax_nexus");
+  const hasAppendix = incomeTaxSalesRows.length > 0 || salesTaxSalesRows.length > 0;
 
   return (
     <>
@@ -567,7 +586,7 @@ export default function ReportPage() {
         <div className="report-section">
           <h2 className="section-heading">Risk Summary</h2>
 
-          {activeRisks.length > 0 ? (
+          {sortedActiveRisks.length > 0 ? (
             <table className="data-table">
               <thead>
                 <tr>
@@ -577,11 +596,11 @@ export default function ReportPage() {
                 </tr>
               </thead>
               <tbody>
-                {activeRisks.map((r, i) => (
+                {sortedActiveRisks.map((r, i) => (
                   <tr key={i}>
                     <td className="td">{r.category}</td>
                     <td className="td">{severityBadge(r.severity)}</td>
-                    <td className="td">{r.text}</td>
+                    <td className="td"><strong>{r.title}</strong></td>
                   </tr>
                 ))}
               </tbody>
@@ -608,7 +627,7 @@ export default function ReportPage() {
                     <tr key={i}>
                       <td className="td">{r.category}</td>
                       <td className="td">{severityBadge(r.severity)}</td>
-                      <td className="td">{r.text}</td>
+                      <td className="td"><strong>{r.title}</strong></td>
                     </tr>
                   ))}
                 </tbody>
@@ -701,7 +720,7 @@ export default function ReportPage() {
                   <p className="label-bold">Finding</p>
                   {risksByCategory[cat].map((risk, i) => (
                     <p key={i} className="finding-item">
-                      <span className="finding-num">{i + 1}.</span>{" "}{risk.text}
+                      <span className="finding-num">{i + 1}.</span>{" "}<strong>{risk.title}.</strong>{" "}{risk.text}
                     </p>
                   ))}
 
@@ -723,7 +742,7 @@ export default function ReportPage() {
                   <p className="label-bold">Recommendation</p>
                   {recsByCategory[cat].map((rec, i) => (
                     <p key={i} className="finding-item">
-                      <span className="finding-num">{i + 1}.</span>{" "}{rec.text}
+                      <span className="finding-num">{i + 1}.</span>{" "}<strong>{rec.title}.</strong>{" "}{rec.text}
                     </p>
                   ))}
                 </div>
@@ -732,34 +751,69 @@ export default function ReportPage() {
           </div>
         )}
 
-        {/* APPENDIX — STATE SALES DATA */}
-        {stateSales && stateSales.length > 0 && (
+        {/* APPENDIX — STATE SALES DATA (split by question type) */}
+        {hasAppendix && (
           <div className="report-section">
             <h2 className="section-heading">Appendix A: State Sales Data</h2>
             <p className="body-para" style={{ marginBottom: "18px" }}>
               The following estimated annual sales figures were provided as part of the diligence intake process and are used as inputs to the exposure calculations in this report.
             </p>
-            {stateSales.some((r) => r.state === "Other (combined)") && (
-              <p className="body-para" style={{ marginBottom: "18px", fontStyle: "italic" }}>
-                Note: A combined estimate was provided for certain states where individual data was not available. Specific threshold analysis is not possible for the combined bucket; recommend obtaining state-level sales detail to refine exposure estimates.
-              </p>
+
+            {/* Income Tax Nexus table */}
+            {incomeTaxSalesRows.length > 0 && (
+              <>
+                <h3 className="appendix-sub-heading">Income Tax Nexus — Reported State Sales</h3>
+                {incomeTaxSalesRows.some((r) => r.state === "Other (combined)") && (
+                  <p className="body-para" style={{ marginBottom: "12px", fontStyle: "italic" }}>
+                    Note: A combined estimate was provided for certain states where individual data was not available. Specific threshold analysis is not possible for the combined bucket; recommend obtaining state-level sales detail to refine exposure estimates.
+                  </p>
+                )}
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th className="th" style={{ width: "45%" }}>State</th>
+                      <th className="th">Estimated Annual Sales</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {incomeTaxSalesRows.map((row, i) => (
+                      <tr key={i}>
+                        <td className="td">{row.state}</td>
+                        <td className="td">{fmtCurrency(row.year_1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
             )}
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th className="th" style={{ width: "45%" }}>State</th>
-                  <th className="th">Estimated Annual Sales</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stateSales.map((row, i) => (
-                  <tr key={i}>
-                    <td className="td">{row.state}</td>
-                    <td className="td">{fmtCurrency(row.year_1)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+            {/* Sales & Use Tax Nexus table */}
+            {salesTaxSalesRows.length > 0 && (
+              <>
+                <h3 className="appendix-sub-heading">Sales &amp; Use Tax Nexus — Reported State Sales</h3>
+                {salesTaxSalesRows.some((r) => r.state === "Other (combined)") && (
+                  <p className="body-para" style={{ marginBottom: "12px", fontStyle: "italic" }}>
+                    Note: A combined estimate was provided for certain states where individual data was not available. Specific threshold analysis is not possible for the combined bucket; recommend obtaining state-level sales detail to refine exposure estimates.
+                  </p>
+                )}
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th className="th" style={{ width: "45%" }}>State</th>
+                      <th className="th">Estimated Annual Sales</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salesTaxSalesRows.map((row, i) => (
+                      <tr key={i}>
+                        <td className="td">{row.state}</td>
+                        <td className="td">{fmtCurrency(row.year_1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
           </div>
         )}
 

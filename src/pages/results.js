@@ -12,6 +12,16 @@ const CATEGORIES = [
   "Unclaimed Property",
 ];
 
+const SEVERITY_ORDER = { high: 0, moderate: 1, low: 2 };
+
+const BORDER_COLOR = { high: "#ef4444", moderate: "#f59e0b", low: "#3b82f6" };
+const BADGE_STYLE = {
+  high: "text-red-700 bg-red-100",
+  moderate: "text-amber-700 bg-amber-100",
+  low: "text-blue-700 bg-blue-100",
+};
+const SEVERITY_LABEL = { high: "High", moderate: "Moderate", low: "Low" };
+
 function Shell({ children }) {
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -69,11 +79,13 @@ export default function Results() {
   const recommendations = risks.filter((r) => r.severity === "recommendation");
   const activeRisks = risks.filter((r) => r.severity !== "recommendation");
 
-  const risksByCategory = {};
-  for (const risk of activeRisks) {
-    if (!risksByCategory[risk.category]) risksByCategory[risk.category] = [];
-    risksByCategory[risk.category].push(risk);
-  }
+  const sortedActiveRisks = [...activeRisks].sort(
+    (a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3)
+  );
+
+  const highCount     = activeRisks.filter((r) => r.severity === "high").length;
+  const moderateCount = activeRisks.filter((r) => r.severity === "moderate").length;
+  const lowCount      = activeRisks.filter((r) => r.severity === "low").length;
 
   const recsByCategory = {};
   for (const rec of recommendations) {
@@ -81,9 +93,9 @@ export default function Results() {
     recsByCategory[rec.category].push(rec);
   }
 
-  const riskyCategories = CATEGORIES.filter((c) => risksByCategory[c]);
-  const recCategories = CATEGORIES.filter((c) => recsByCategory[c] && !risksByCategory[c]);
-  const cleanCategories = CATEGORIES.filter((c) => !risksByCategory[c] && !recsByCategory[c]);
+  const riskCategorySet = new Set(activeRisks.map((r) => r.category));
+  const recCategories   = CATEGORIES.filter((c) => recsByCategory[c] && !riskCategorySet.has(c));
+  const cleanCategories = CATEGORIES.filter((c) => !riskCategorySet.has(c) && !recsByCategory[c]);
 
   return (
     <Shell>
@@ -145,34 +157,50 @@ export default function Results() {
             </div>
           )}
 
-          {/* Risk cards */}
-          {riskyCategories.length > 0 && (
+          {/* Risk cards — flat sorted list */}
+          {sortedActiveRisks.length > 0 && (
             <div className="mb-10">
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">
-                Identified Risks
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+                  Identified Risks
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {highCount > 0 && (
+                    <span className="text-red-600 font-semibold">{highCount} High</span>
+                  )}
+                  {highCount > 0 && (moderateCount > 0 || lowCount > 0) && (
+                    <span className="text-gray-300 mx-1.5">·</span>
+                  )}
+                  {moderateCount > 0 && (
+                    <span className="text-amber-600 font-semibold">{moderateCount} Moderate</span>
+                  )}
+                  {moderateCount > 0 && lowCount > 0 && (
+                    <span className="text-gray-300 mx-1.5">·</span>
+                  )}
+                  {lowCount > 0 && (
+                    <span className="text-blue-600 font-semibold">{lowCount} Low</span>
+                  )}
+                </p>
+              </div>
               <div className="space-y-3">
-                {riskyCategories.flatMap((category) =>
-                  risksByCategory[category].map((risk, i) => {
-                    const severityStyles = {
-                      high: { card: "border-red-200 bg-red-50", badge: "text-red-700 bg-red-100", label: "High" },
-                      moderate: { card: "border-amber-200 bg-amber-50", badge: "text-amber-700 bg-amber-100", label: "Moderate" },
-                      low: { card: "border-blue-200 bg-blue-50", badge: "text-blue-700 bg-blue-100", label: "Low" },
-                    };
-                    const s = severityStyles[risk.severity] || severityStyles.moderate;
-                    return (
-                      <div key={`${category}-${i}`} className={`border rounded-xl p-5 ${s.card}`}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className={`inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full ${s.badge}`}>
-                            {s.label}
-                          </span>
-                          <span className="text-xs text-gray-500">{category}</span>
-                        </div>
-                        <p className="text-gray-700 text-sm leading-relaxed">{risk.text}</p>
+                {sortedActiveRisks.map((risk, i) => (
+                  <div
+                    key={i}
+                    className="bg-white rounded-xl shadow-sm border border-gray-100 p-5"
+                    style={{ borderLeft: `4px solid ${BORDER_COLOR[risk.severity] || "#3b82f6"}` }}
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div>
+                        <p className="text-xs text-gray-400 mb-0.5">{risk.category}</p>
+                        <p className="font-semibold text-gray-800 text-sm">{risk.title}</p>
                       </div>
-                    );
-                  })
-                )}
+                      <span className={`flex-shrink-0 inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full ${BADGE_STYLE[risk.severity] || BADGE_STYLE.low}`}>
+                        {SEVERITY_LABEL[risk.severity] || risk.severity}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-500 leading-relaxed">{risk.text}</p>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -194,13 +222,16 @@ export default function Results() {
                 {recCategories.flatMap((category) =>
                   recsByCategory[category].map((rec, i) => (
                     <div key={`${category}-rec-${i}`} className="border border-gray-200 rounded-xl p-5 bg-gray-50">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="inline-block text-xs font-semibold text-gray-600 bg-gray-200 px-2.5 py-0.5 rounded-full">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div>
+                          <p className="text-xs text-gray-400 mb-0.5">{category}</p>
+                          <p className="font-semibold text-gray-700 text-sm">{rec.title}</p>
+                        </div>
+                        <span className="flex-shrink-0 inline-block text-xs font-semibold text-gray-600 bg-gray-200 px-2.5 py-0.5 rounded-full">
                           Recommendation
                         </span>
-                        <span className="text-xs text-gray-500">{category}</span>
                       </div>
-                      <p className="text-gray-700 text-sm leading-relaxed">{rec.text}</p>
+                      <p className="text-gray-600 text-sm leading-relaxed">{rec.text}</p>
                     </div>
                   ))
                 )}

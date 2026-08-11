@@ -15,9 +15,10 @@ const VALID_QUESTION_IDS = new Set([
   "employment_tax_states", "contractor_usage", "contractor_classification",
   "property_tax", "unclaimed_property",
   // financial input questions
+  "most_recent_filed_year",
   "gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3",
   "taxable_income_y1", "taxable_income_y2", "taxable_income_y3",
-  "officer_comp", "erc_amount", "contractor_count",
+  "officer_comp", "erc_amount", "contractor_count", "contractor_comp",
   // equity questions
   "entity_type",
   "scorp_single_class", "scorp_shareholder_count", "scorp_eligible_shareholders",
@@ -32,7 +33,8 @@ const FREE_FORM_QUESTIONS = new Set([
   "ccorp_nol_amount",
   "gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3",
   "taxable_income_y1", "taxable_income_y2", "taxable_income_y3",
-  "officer_comp", "erc_amount", "contractor_count",
+  "officer_comp", "erc_amount", "contractor_count", "contractor_comp",
+  "most_recent_filed_year",
   "revenue_type",
 ]);
 
