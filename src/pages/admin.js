@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
 
-const ADMIN_KEY = "MERGERAID_ADMIN_2025";
-
 const TABS = [
-  { key: "users",                label: "Users" },
-  { key: "deals",                label: "Deals" },
-  { key: "contact_submissions",  label: "Contact Submissions" },
+  { key: "users",               label: "Users" },
+  { key: "deals",               label: "Deals" },
+  { key: "contact_submissions", label: "Contact Submissions" },
 ];
 
 function formatCell(col, val) {
@@ -24,6 +22,7 @@ function formatCell(col, val) {
 
 export default function Admin() {
   const [authenticated, setAuthenticated] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [activeTab, setActiveTab] = useState("users");
@@ -31,10 +30,18 @@ export default function Admin() {
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
 
+  // On mount: probe the data endpoint to see if a valid session cookie exists
   useEffect(() => {
-    if (sessionStorage.getItem("admin_auth") === ADMIN_KEY) {
-      setAuthenticated(true);
-    }
+    fetch("/api/admin/data?table=users", { credentials: "same-origin" })
+      .then(async (r) => {
+        if (r.ok) {
+          const data = await r.json();
+          setTableData({ users: data.rows });
+          setAuthenticated(true);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setChecking(false));
   }, []);
 
   useEffect(() => {
@@ -47,8 +54,13 @@ export default function Admin() {
     setFetchError("");
     try {
       const res = await fetch(`/api/admin/data?table=${table}`, {
-        headers: { "x-admin-key": ADMIN_KEY },
+        credentials: "same-origin",
       });
+      if (res.status === 401) {
+        setAuthenticated(false);
+        setTableData({});
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         setFetchError(data.error || "Failed to load data.");
@@ -62,24 +74,53 @@ export default function Admin() {
     }
   }
 
-  function handleLogin(e) {
+  async function handleLogin(e) {
     e.preventDefault();
-    if (password === ADMIN_KEY) {
-      sessionStorage.setItem("admin_auth", ADMIN_KEY);
-      setAuthenticated(true);
-    } else {
-      setPasswordError("Incorrect password.");
+    setPasswordError("");
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ password }),
+      });
       setPassword("");
+      if (res.ok) {
+        setAuthenticated(true);
+      } else {
+        const data = await res.json();
+        setPasswordError(
+          res.status === 429
+            ? (data.error || "Too many attempts. Please try again later.")
+            : "Incorrect password."
+        );
+      }
+    } catch {
+      setPasswordError("Network error. Please try again.");
     }
   }
 
-  function handleSignOut() {
-    sessionStorage.removeItem("admin_auth");
+  async function handleLogout() {
+    try {
+      await fetch("/api/admin/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+    } catch {}
     setAuthenticated(false);
     setTableData({});
+    setFetchError("");
   }
 
-  // ── Password gate ────────────────────────────────────────────────────────────
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-sm text-gray-400">Loading…</p>
+      </div>
+    );
+  }
+
+  // ── Password gate ─────────────────────────────────────────────────────────
   if (!authenticated) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
@@ -111,7 +152,7 @@ export default function Admin() {
     );
   }
 
-  // ── Dashboard ────────────────────────────────────────────────────────────────
+  // ── Dashboard ─────────────────────────────────────────────────────────────
   const rows = tableData[activeTab];
   const columns = rows && rows.length > 0 ? Object.keys(rows[0]) : [];
 
@@ -121,7 +162,7 @@ export default function Admin() {
       <div className="bg-white border-b px-6 py-4 flex items-center justify-between">
         <h1 className="text-lg font-bold text-blue-700">MergerAid Admin</h1>
         <button
-          onClick={handleSignOut}
+          onClick={handleLogout}
           className="text-sm text-gray-500 hover:text-red-600 transition-colors"
         >
           Sign Out
