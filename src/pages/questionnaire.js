@@ -160,7 +160,7 @@ const QUESTIONS = {
     number: 12,
     text: "Does the Company have employees residing or traveling to states where the Company does not file employment tax returns?",
     outcomes: {
-      yes: { risk: true, next: "contractor_usage", nextNumber: 13 },
+      yes: { stateSelect: true, skipAmounts: true, next: "contractor_usage", nextNumber: 13 },
       no:  { next: "contractor_usage", nextNumber: 13 },
     },
   },
@@ -498,9 +498,10 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
 
     if (outcome.stateSelect) {
       const { next: nextId, nextNumber: nextNum } = outcome;
-      const stateCtx = { questionId: qId, nextId, nextNumber: nextNum };
+      const isNexusFlow = qId === "income_tax_nexus" || qId === "sales_tax_nexus";
+      const stateCtx = { questionId: qId, nextId, nextNumber: nextNum, skipAmounts: outcome.skipAmounts ?? false };
       if (nextId !== "done" && a[nextId] !== undefined) {
-        if (!nexusDurationDone) {
+        if (!nexusDurationDone && isNexusFlow) {
           if (a.nexus_duration === undefined) {
             return {
               finalState: snap({
@@ -733,6 +734,9 @@ export default function Questionnaire() {
   const [pendingNextId, setPendingNextId] = useState(null);
   const [pendingNextNum, setPendingNextNum] = useState(null);
 
+  // ── Cross-flow prefill indicator ─────────────────────────────────────────
+  const [stateSalesPrefilled, setStateSalesPrefilled] = useState(false);
+
   // ── Equity flow state ────────────────────────────────────────────────────
   const [equityView, setEquityView] = useState("entity-select");
   const [equityQuestionId, setEquityQuestionId] = useState(null);
@@ -809,7 +813,7 @@ export default function Questionnaire() {
       setHistoryStack((h) => [...h, snap]);
       const outcome = QUESTIONS[questionId].outcomes[answer];
       if (outcome.stateSelect) {
-        setStateSelectContext({ questionId, nextId: outcome.next, nextNumber: outcome.nextNumber });
+        setStateSelectContext({ questionId, nextId: outcome.next, nextNumber: outcome.nextNumber, skipAmounts: outcome.skipAmounts ?? false });
         setSelectedStates([]);
         setStateSalesData({});
         setCombinedEstimate("");
@@ -879,8 +883,8 @@ export default function Questionnaire() {
     );
   }
 
-  function handleStateSelectContinue() {
-    const { nextId, nextNumber } = stateSelectContext;
+  async function handleStateSelectContinue() {
+    const { nextId, nextNumber, skipAmounts } = stateSelectContext;
     const snap = captureSnapshot();
     setHistoryStack((h) => [...h, snap]);
     if (selectedStates.length === 0) {
@@ -888,10 +892,61 @@ export default function Questionnaire() {
       else { setQuestionId(nextId); setQuestionNumber(equityOffset + nextNumber); setView("question"); }
       return;
     }
+
+    if (skipAmounts) {
+      setError(""); setSubmitting(true);
+      try {
+        const res = await fetch("/api/state-sales", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dealId,
+            questionId: stateSelectContext.questionId,
+            states: selectedStates.map((s) => ({ state: s, year1: null })),
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || "Server error");
+        }
+        if (nextId === "done") setView("done");
+        else { setQuestionId(nextId); setQuestionNumber(equityOffset + nextNumber); setView("question"); }
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // Regular nexus flow: try cross-flow prefill then show state-sales
     const initial = {};
     for (const s of selectedStates) initial[s] = { year1: "" };
+
+    const currentQId = stateSelectContext.questionId;
+    const otherQId =
+      currentQId === "income_tax_nexus" ? "sales_tax_nexus" :
+      currentQId === "sales_tax_nexus"  ? "income_tax_nexus" : null;
+
+    let prefilled = false;
+    if (otherQId && dealId) {
+      try {
+        const r = await fetch(`/api/state-sales?dealId=${encodeURIComponent(dealId)}&questionId=${otherQId}`);
+        if (r.ok) {
+          const { rows } = await r.json();
+          for (const row of rows) {
+            if (initial[row.state] !== undefined && row.year_1 != null) {
+              initial[row.state] = { year1: String(row.year_1) };
+              prefilled = true;
+            }
+          }
+        }
+      } catch {}
+    }
+
     setStateSalesData(initial);
     setCombinedEstimate("");
+    setStateSalesPrefilled(prefilled);
     setView("state-sales");
   }
 
@@ -1111,6 +1166,8 @@ export default function Questionnaire() {
 
   const stateSelectTitle = stateSelectContext?.questionId === "income_tax_nexus"
     ? "Select all states where the Company has sales to customers but does not file income tax returns:"
+    : stateSelectContext?.questionId === "employment_tax_states"
+    ? "Select the states where the Company has employees residing or working but does not file employment tax returns:"
     : "Select all states where the Company has sales to customers but does not collect or remit sales and use tax:";
 
   const yesBtn = (onClick) => (
@@ -1280,9 +1337,14 @@ export default function Questionnaire() {
 
                 <button
                   onClick={handleStateSelectContinue}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
+                  disabled={submitting}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold py-3 rounded-lg transition-colors"
                 >
-                  {selectedStates.length === 0 ? "Skip →" : `Enter Sales for ${selectedStates.length} State${selectedStates.length !== 1 ? "s" : ""} →`}
+                  {submitting ? "Saving…" : selectedStates.length === 0
+                    ? "Skip →"
+                    : stateSelectContext?.skipAmounts
+                    ? `Confirm ${selectedStates.length} State${selectedStates.length !== 1 ? "s" : ""} →`
+                    : `Enter Sales for ${selectedStates.length} State${selectedStates.length !== 1 ? "s" : ""} →`}
                 </button>
               </div>
             )}
@@ -1296,6 +1358,12 @@ export default function Questionnaire() {
                   </button>
                 )}
                 <p className="text-gray-800 text-base font-medium mb-1">Enter estimated annual sales ($) by state:</p>
+
+                {stateSalesPrefilled && (
+                  <p className="text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-3">
+                    Amounts entered earlier for the same states have been pre-filled — adjust if needed.
+                  </p>
+                )}
 
                 {selectedStates.length > 12 && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800 mb-5">

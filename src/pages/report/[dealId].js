@@ -2,6 +2,8 @@ import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { calculateExposures } from "../../lib/exposureEngine";
+import { salesTaxCombinedRate, corpIncomeTaxRate } from "../../lib/stateRates";
+import { getThreshold, NO_SALES_TAX_STATES } from "../../lib/nexusThresholds";
 
 // ─── Static metadata per risk category ───────────────────────────────────────
 
@@ -464,9 +466,12 @@ export default function ReportPage() {
   });
 
   // Appendix A — split by question_id
-  const incomeTaxSalesRows = (stateSales || []).filter((r) => r.question_id === "income_tax_nexus");
-  const salesTaxSalesRows  = (stateSales || []).filter((r) => r.question_id === "sales_tax_nexus");
-  const hasAppendix = incomeTaxSalesRows.length > 0 || salesTaxSalesRows.length > 0;
+  const incomeTaxSalesRows  = (stateSales || []).filter((r) => r.question_id === "income_tax_nexus");
+  const salesTaxSalesRows   = (stateSales || []).filter((r) => r.question_id === "sales_tax_nexus");
+  const employmentTaxRows   = (stateSales || []).filter((r) => r.question_id === "employment_tax_states");
+  const hasAppendix = incomeTaxSalesRows.length > 0 || salesTaxSalesRows.length > 0 || employmentTaxRows.length > 0;
+  const nexusDurRow = (answers || []).find((r) => r.question_id === "nexus_duration");
+  const nexusDurationLabel = nexusDurRow ? (parseInt(nexusDurRow.answer) || 3) : 3;
 
   return (
     <>
@@ -765,12 +770,16 @@ export default function ReportPage() {
           </div>
         )}
 
-        {/* APPENDIX — STATE SALES DATA (split by question type) */}
+        {/* APPENDIX A — STATE-LEVEL INFORMATION */}
         {hasAppendix && (
           <div className="report-section">
-            <h2 className="section-heading">Appendix A: State Sales Data</h2>
+            <h2 className="section-heading">Appendix A: State-Level Information</h2>
             <p className="body-para" style={{ marginBottom: "18px" }}>
-              The following estimated annual sales figures were provided as part of the diligence intake process and are used as inputs to the exposure calculations in this report.
+              The following state-level information was provided through the screening questionnaire. Sales
+              figures represent estimated annual sales for the most recent completed year and, per
+              management&apos;s representation, are treated as representative of a {nexusDurationLabel}-year
+              period for exposure estimation. Rates shown are the screening rates applied in the Estimated
+              Tax Exposure Summary.
             </p>
 
             {/* Income Tax Nexus table */}
@@ -779,23 +788,33 @@ export default function ReportPage() {
                 <h3 className="appendix-sub-heading">Income Tax Nexus — Reported State Sales</h3>
                 {incomeTaxSalesRows.some((r) => r.state === "Other (combined)") && (
                   <p className="body-para" style={{ marginBottom: "12px", fontStyle: "italic" }}>
-                    Note: A combined estimate was provided for certain states where individual data was not available. Specific threshold analysis is not possible for the combined bucket; recommend obtaining state-level sales detail to refine exposure estimates.
+                    Note: A combined estimate was provided for certain states where individual data was not available. National average rate applied to combined bucket.
                   </p>
                 )}
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th className="th" style={{ width: "45%" }}>State</th>
+                      <th className="th" style={{ width: "33%" }}>State</th>
                       <th className="th">Estimated Annual Sales</th>
+                      <th className="th">Corp. Rate Applied</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {incomeTaxSalesRows.map((row, i) => (
-                      <tr key={i}>
-                        <td className="td">{row.state}</td>
-                        <td className="td">{fmtCurrency(row.year_1)}</td>
-                      </tr>
-                    ))}
+                    {incomeTaxSalesRows.map((row, i) => {
+                      const isCombined = row.state === "Other (combined)";
+                      const rate = isCombined
+                        ? "6.5% (national avg.)"
+                        : corpIncomeTaxRate[row.state] != null
+                        ? (corpIncomeTaxRate[row.state] * 100).toFixed(2) + "%"
+                        : "—";
+                      return (
+                        <tr key={i}>
+                          <td className="td">{row.state}</td>
+                          <td className="td">{fmtCurrency(row.year_1)}</td>
+                          <td className="td">{rate}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </>
@@ -807,21 +826,65 @@ export default function ReportPage() {
                 <h3 className="appendix-sub-heading">Sales &amp; Use Tax Nexus — Reported State Sales</h3>
                 {salesTaxSalesRows.some((r) => r.state === "Other (combined)") && (
                   <p className="body-para" style={{ marginBottom: "12px", fontStyle: "italic" }}>
-                    Note: A combined estimate was provided for certain states where individual data was not available. Specific threshold analysis is not possible for the combined bucket; recommend obtaining state-level sales detail to refine exposure estimates.
+                    Note: A combined estimate was provided for certain states where individual data was not available. National average rate and combined threshold status applied to combined bucket.
                   </p>
                 )}
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th className="th" style={{ width: "45%" }}>State</th>
+                      <th className="th" style={{ width: "25%" }}>State</th>
                       <th className="th">Estimated Annual Sales</th>
+                      <th className="th">Combined Rate Applied</th>
+                      <th className="th">Nexus Threshold Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {salesTaxSalesRows.map((row, i) => (
+                    {salesTaxSalesRows.map((row, i) => {
+                      const isCombined = row.state === "Other (combined)";
+                      const isNoTax = !isCombined && NO_SALES_TAX_STATES.has(row.state);
+                      const amount = !isCombined ? (Number(row.year_1) || 0) : 0;
+                      const status = isCombined
+                        ? "Combined Estimate"
+                        : isNoTax
+                        ? "No Sales Tax"
+                        : amount >= getThreshold(row.state)
+                        ? "Above Threshold"
+                        : "Below Threshold";
+                      const rate = isCombined
+                        ? "7.0% (national avg.)"
+                        : isNoTax
+                        ? "0%"
+                        : salesTaxCombinedRate[row.state] != null
+                        ? (salesTaxCombinedRate[row.state] * 100).toFixed(2) + "%"
+                        : "—";
+                      return (
+                        <tr key={i}>
+                          <td className="td">{row.state}</td>
+                          <td className="td">{fmtCurrency(row.year_1)}</td>
+                          <td className="td">{rate}</td>
+                          <td className="td">{status}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {/* Employment Tax states table */}
+            {employmentTaxRows.length > 0 && (
+              <>
+                <h3 className="appendix-sub-heading">Employment Tax — States Identified</h3>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th className="th">State</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employmentTaxRows.map((row, i) => (
                       <tr key={i}>
                         <td className="td">{row.state}</td>
-                        <td className="td">{fmtCurrency(row.year_1)}</td>
                       </tr>
                     ))}
                   </tbody>

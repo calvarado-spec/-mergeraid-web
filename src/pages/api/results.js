@@ -2,7 +2,7 @@ import { Pool } from "pg";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-function computeRisks(answers) {
+function computeRisks(answers, empStates = []) {
   const a = {};
   for (const row of answers) a[row.question_id] = row.answer;
 
@@ -71,9 +71,13 @@ function computeRisks(answers) {
       "Risk of unpaid use tax on purchases from vendors that did not collect sales tax. Exposure is generally limited to purchases from out-of-state vendors not registered in the Company's state. Purchases from major retailers that collect sales tax broadly present minimal risk. Recommend reviewing vendor invoices for instances where tax was not charged.", "low");
 
   // ── Employment Tax ───────────────────────────────────────────────────────
-  if (a.employment_tax_states === "yes")
-    add("Employment Tax", "Multi-State Employment Tax Obligations",
-      "Risk of employment tax filing obligations in states where employees reside or travel to perform services. Employees who reside in another state create definitive nexus requiring payroll tax registration and filing. De minimis travel may not create an obligation depending on the state but should be monitored. Travel to perform services will generally create an employment tax filing obligation. Recommend reviewing employee rosters by state of residence and work location.", "moderate");
+  if (a.employment_tax_states === "yes") {
+    let empText = "Risk of employment tax filing obligations in states where employees reside or travel to perform services. Employees who reside in another state create definitive nexus requiring payroll tax registration and filing. De minimis travel may not create an obligation depending on the state but should be monitored. Travel to perform services will generally create an employment tax filing obligation. Recommend reviewing employee rosters by state of residence and work location.";
+    if (empStates.length > 0) {
+      empText += ` Management identified the following states: ${empStates.join(", ")}.`;
+    }
+    add("Employment Tax", "Multi-State Employment Tax Obligations", empText, "moderate");
+  }
 
   if (a.contractor_usage === "yes" && a.contractor_classification === "no")
     add("Employment Tax", "Contractor Misclassification Risk",
@@ -168,13 +172,17 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [dealResult, answersResult] = await Promise.all([
+    const [dealResult, answersResult, empSalesResult] = await Promise.all([
       pool.query(
         "SELECT id, client_name, target_name, deal_type FROM deals WHERE id = $1",
         [dealId]
       ),
       pool.query(
         "SELECT question_id, answer FROM answers WHERE deal_id = $1",
+        [dealId]
+      ),
+      pool.query(
+        "SELECT state FROM state_sales WHERE deal_id = $1 AND question_id = 'employment_tax_states' ORDER BY state ASC",
         [dealId]
       ),
     ]);
@@ -184,7 +192,8 @@ export default async function handler(req, res) {
     }
 
     const deal = dealResult.rows[0];
-    const risks = computeRisks(answersResult.rows);
+    const empStates = empSalesResult.rows.map((r) => r.state);
+    const risks = computeRisks(answersResult.rows, empStates);
 
     return res.status(200).json({ deal, risks });
   } catch (err) {

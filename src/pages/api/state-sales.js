@@ -2,9 +2,26 @@ import { Pool } from "pg";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const VALID_QUESTION_IDS = new Set(["income_tax_nexus", "sales_tax_nexus"]);
+const VALID_QUESTION_IDS = new Set(["income_tax_nexus", "sales_tax_nexus", "employment_tax_states"]);
 
 export default async function handler(req, res) {
+  if (req.method === "GET") {
+    const { dealId, questionId } = req.query;
+    if (!dealId) return res.status(400).json({ error: "dealId is required" });
+    if (!questionId || !VALID_QUESTION_IDS.has(questionId))
+      return res.status(400).json({ error: "Invalid questionId" });
+    try {
+      const result = await pool.query(
+        "SELECT state, year_1 FROM state_sales WHERE deal_id = $1 AND question_id = $2 ORDER BY state ASC",
+        [dealId, questionId]
+      );
+      return res.status(200).json({ rows: result.rows });
+    } catch (err) {
+      console.error("DB error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }

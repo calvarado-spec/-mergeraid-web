@@ -1,5 +1,7 @@
 import Head from "next/head";
 import { calculateExposures } from "../lib/exposureEngine";
+import { salesTaxCombinedRate, corpIncomeTaxRate } from "../lib/stateRates";
+import { getThreshold, NO_SALES_TAX_STATES } from "../lib/nexusThresholds";
 import {
   SAMPLE_DEAL,
   SAMPLE_RISKS,
@@ -450,6 +452,12 @@ export default function SampleReportPage() {
     year: "numeric",
   });
 
+  const nexusDurAns = SAMPLE_ANSWERS.find((r) => r.question_id === "nexus_duration");
+  const nexusDurationLabel = nexusDurAns ? (parseInt(nexusDurAns.answer) || 3) : 3;
+  const incomeTaxSampleRows  = SAMPLE_STATE_SALES.filter((r) => r.question_id === "income_tax_nexus");
+  const salesTaxSampleRows   = SAMPLE_STATE_SALES.filter((r) => r.question_id === "sales_tax_nexus");
+  const employmentSampleRows = SAMPLE_STATE_SALES.filter((r) => r.question_id === "employment_tax_states");
+
   return (
     <>
       <Head>
@@ -790,54 +798,116 @@ export default function SampleReportPage() {
           </div>
         )}
 
-        {/* APPENDIX — STATE SALES DATA */}
-        {SAMPLE_STATE_SALES.length > 0 && (() => {
-          const sections = [
-            { id: "income_tax_nexus", label: "Income Tax Nexus — Reported State Sales" },
-            { id: "sales_tax_nexus",  label: "Sales & Use Tax Nexus — Reported State Sales" },
-          ];
-          const byQid = {};
-          for (const row of SAMPLE_STATE_SALES) {
-            const qid = row.question_id || "sales_tax_nexus";
-            if (!byQid[qid]) byQid[qid] = [];
-            byQid[qid].push(row);
-          }
-          const activeSections = sections.filter((s) => byQid[s.id]?.length > 0);
-          if (activeSections.length === 0) return null;
-          return (
-            <div className="report-section watermark-page">
-              <h2 className="section-heading">Appendix A: State Sales Data</h2>
-              <p className="body-para" style={{ marginBottom: "18px" }}>
-                The following state-level sales figures were provided as part of the diligence intake process.
-              </p>
-              {activeSections.map((section) => (
-                <div key={section.id}>
-                  <p className="appendix-sub-heading">{section.label}</p>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th className="th" style={{ width: "32%" }}>State</th>
-                        <th className="th">Year 1</th>
-                        <th className="th">Year 2</th>
-                        <th className="th">Year 3</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {byQid[section.id].map((row, i) => (
+        {/* APPENDIX A — STATE-LEVEL INFORMATION */}
+        {(incomeTaxSampleRows.length > 0 || salesTaxSampleRows.length > 0 || employmentSampleRows.length > 0) && (
+          <div className="report-section watermark-page">
+            <h2 className="section-heading">Appendix A: State-Level Information</h2>
+            <p className="body-para" style={{ marginBottom: "18px" }}>
+              The following state-level information was provided through the screening questionnaire. Sales
+              figures represent estimated annual sales for the most recent completed year and, per
+              management&apos;s representation, are treated as representative of a {nexusDurationLabel}-year
+              period for exposure estimation. Rates shown are the screening rates applied in the Estimated
+              Tax Exposure Summary.
+            </p>
+
+            {incomeTaxSampleRows.length > 0 && (
+              <>
+                <p className="appendix-sub-heading">Income Tax Nexus — Reported State Sales</p>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th className="th" style={{ width: "33%" }}>State</th>
+                      <th className="th">Estimated Annual Sales</th>
+                      <th className="th">Corp. Rate Applied</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {incomeTaxSampleRows.map((row, i) => {
+                      const isCombined = row.state === "Other (combined)";
+                      const rate = isCombined
+                        ? "6.5% (national avg.)"
+                        : corpIncomeTaxRate[row.state] != null
+                        ? (corpIncomeTaxRate[row.state] * 100).toFixed(2) + "%"
+                        : "—";
+                      return (
                         <tr key={i}>
                           <td className="td">{row.state}</td>
                           <td className="td">{fmtCurrency(row.year_1)}</td>
-                          <td className="td">{fmtCurrency(row.year_2)}</td>
-                          <td className="td">{fmtCurrency(row.year_3)}</td>
+                          <td className="td">{rate}</td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ))}
-            </div>
-          );
-        })()}
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {salesTaxSampleRows.length > 0 && (
+              <>
+                <p className="appendix-sub-heading">Sales &amp; Use Tax Nexus — Reported State Sales</p>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th className="th" style={{ width: "25%" }}>State</th>
+                      <th className="th">Estimated Annual Sales</th>
+                      <th className="th">Combined Rate Applied</th>
+                      <th className="th">Nexus Threshold Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salesTaxSampleRows.map((row, i) => {
+                      const isCombined = row.state === "Other (combined)";
+                      const isNoTax = !isCombined && NO_SALES_TAX_STATES.has(row.state);
+                      const amount = !isCombined ? (Number(row.year_1) || 0) : 0;
+                      const status = isCombined
+                        ? "Combined Estimate"
+                        : isNoTax
+                        ? "No Sales Tax"
+                        : amount >= getThreshold(row.state)
+                        ? "Above Threshold"
+                        : "Below Threshold";
+                      const rate = isCombined
+                        ? "7.0% (national avg.)"
+                        : isNoTax
+                        ? "0%"
+                        : salesTaxCombinedRate[row.state] != null
+                        ? (salesTaxCombinedRate[row.state] * 100).toFixed(2) + "%"
+                        : "—";
+                      return (
+                        <tr key={i}>
+                          <td className="td">{row.state}</td>
+                          <td className="td">{fmtCurrency(row.year_1)}</td>
+                          <td className="td">{rate}</td>
+                          <td className="td">{status}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {employmentSampleRows.length > 0 && (
+              <>
+                <p className="appendix-sub-heading">Employment Tax — States Identified</p>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th className="th">State</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employmentSampleRows.map((row, i) => (
+                      <tr key={i}>
+                        <td className="td">{row.state}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </div>
+        )}
 
       </div>
     </>
