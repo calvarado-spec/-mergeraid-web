@@ -324,6 +324,11 @@ const STYLES = `
   .exposure-td-right { padding: 8px 12px; border-bottom: 1px solid #e4e4e4; text-align: right; color: #333; white-space: nowrap; }
   .exposure-total { font-weight: bold; color: #1e3a5f; background: #eef2f7; }
   .exposure-disclaimer { font-size: 7.5pt; color: #999; line-height: 1.55; font-style: italic; border-top: 1px solid #e4e4e4; padding-top: 10px; margin-top: 4px; }
+  .exposure-footnotes { margin-top: 14px; border-top: 1px solid #e4e4e4; padding-top: 10px; }
+  .exposure-footnotes-heading { font-size: 7.5pt; font-weight: bold; color: #555; margin-bottom: 6px; }
+  .exposure-footnote { font-size: 7pt; color: #777; line-height: 1.55; margin-bottom: 5px; }
+  .footnote-num { font-weight: bold; color: #555; }
+  .appendix-sub-heading { font-size: 10.5pt; font-weight: bold; color: #1e3a5f; margin: 18px 0 8px; }
 
   /* ── Detailed findings ──────────────────────────────────── */
   .section-block {
@@ -417,8 +422,10 @@ export default function SampleReportPage() {
   const risks = SAMPLE_RISKS;
   const exposures = calculateExposures(SAMPLE_ANSWERS, SAMPLE_STATE_SALES, SAMPLE_INCOME_TAX_SALES);
 
+  const SEVERITY_ORDER = { high: 0, moderate: 1, low: 2 };
   const recommendations = risks.filter((r) => r.severity === "recommendation");
-  const activeRisks = risks.filter((r) => r.severity !== "recommendation");
+  const activeRisks = [...risks.filter((r) => r.severity !== "recommendation")]
+    .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3));
 
   const risksByCategory = {};
   for (const risk of activeRisks) {
@@ -622,7 +629,7 @@ export default function SampleReportPage() {
                   <tr key={i}>
                     <td className="td">{r.category}</td>
                     <td className="td">{severityBadge(r.severity)}</td>
-                    <td className="td">{r.text}</td>
+                    <td className="td"><strong>{r.title}</strong></td>
                   </tr>
                 ))}
               </tbody>
@@ -649,7 +656,7 @@ export default function SampleReportPage() {
                     <tr key={i}>
                       <td className="td">{r.category}</td>
                       <td className="td">{severityBadge(r.severity)}</td>
-                      <td className="td">{r.text}</td>
+                      <td className="td"><strong>{r.title}</strong></td>
                     </tr>
                   ))}
                 </tbody>
@@ -721,6 +728,16 @@ export default function SampleReportPage() {
                 penalties, or interest. Consult a qualified tax advisor before making any decisions
                 based on these figures.
               </p>
+              {exposures.length > 0 && (
+                <div className="exposure-footnotes">
+                  <p className="exposure-footnotes-heading">Methodology Notes</p>
+                  {exposures.map((e, i) => (
+                    <p key={i} className="exposure-footnote">
+                      <span className="footnote-num">{i + 1}.</span>{" "}{e.basis}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })()}
@@ -742,7 +759,7 @@ export default function SampleReportPage() {
                   <p className="label-bold">Finding</p>
                   {risksByCategory[cat].map((risk, i) => (
                     <p key={i} className="finding-item">
-                      <span className="finding-num">{i + 1}.</span>{" "}{risk.text}
+                      <span className="finding-num">{i + 1}.</span>{" "}<strong>{risk.title}.</strong>{" "}{risk.text}
                     </p>
                   ))}
 
@@ -764,7 +781,7 @@ export default function SampleReportPage() {
                   <p className="label-bold">Recommendation</p>
                   {recsByCategory[cat].map((rec, i) => (
                     <p key={i} className="finding-item">
-                      <span className="finding-num">{i + 1}.</span>{" "}{rec.text}
+                      <span className="finding-num">{i + 1}.</span>{" "}<strong>{rec.title}.</strong>{" "}{rec.text}
                     </p>
                   ))}
                 </div>
@@ -774,34 +791,53 @@ export default function SampleReportPage() {
         )}
 
         {/* APPENDIX — STATE SALES DATA */}
-        {SAMPLE_STATE_SALES.length > 0 && (
-          <div className="report-section watermark-page">
-            <h2 className="section-heading">Appendix A: State Sales Data</h2>
-            <p className="body-para" style={{ marginBottom: "18px" }}>
-              The following state-level sales figures were provided as part of the diligence intake process.
-            </p>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th className="th" style={{ width: "32%" }}>State</th>
-                  <th className="th">Year 1</th>
-                  <th className="th">Year 2</th>
-                  <th className="th">Year 3</th>
-                </tr>
-              </thead>
-              <tbody>
-                {SAMPLE_STATE_SALES.map((row, i) => (
-                  <tr key={i}>
-                    <td className="td">{row.state}</td>
-                    <td className="td">{fmtCurrency(row.year_1)}</td>
-                    <td className="td">{fmtCurrency(row.year_2)}</td>
-                    <td className="td">{fmtCurrency(row.year_3)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {SAMPLE_STATE_SALES.length > 0 && (() => {
+          const sections = [
+            { id: "income_tax_nexus", label: "Income Tax Nexus — Reported State Sales" },
+            { id: "sales_tax_nexus",  label: "Sales & Use Tax Nexus — Reported State Sales" },
+          ];
+          const byQid = {};
+          for (const row of SAMPLE_STATE_SALES) {
+            const qid = row.question_id || "sales_tax_nexus";
+            if (!byQid[qid]) byQid[qid] = [];
+            byQid[qid].push(row);
+          }
+          const activeSections = sections.filter((s) => byQid[s.id]?.length > 0);
+          if (activeSections.length === 0) return null;
+          return (
+            <div className="report-section watermark-page">
+              <h2 className="section-heading">Appendix A: State Sales Data</h2>
+              <p className="body-para" style={{ marginBottom: "18px" }}>
+                The following state-level sales figures were provided as part of the diligence intake process.
+              </p>
+              {activeSections.map((section) => (
+                <div key={section.id}>
+                  <p className="appendix-sub-heading">{section.label}</p>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th className="th" style={{ width: "32%" }}>State</th>
+                        <th className="th">Year 1</th>
+                        <th className="th">Year 2</th>
+                        <th className="th">Year 3</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {byQid[section.id].map((row, i) => (
+                        <tr key={i}>
+                          <td className="td">{row.state}</td>
+                          <td className="td">{fmtCurrency(row.year_1)}</td>
+                          <td className="td">{fmtCurrency(row.year_2)}</td>
+                          <td className="td">{fmtCurrency(row.year_3)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
       </div>
     </>

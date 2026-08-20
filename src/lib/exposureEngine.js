@@ -12,6 +12,8 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
   const a = {};
   for (const row of answers) a[row.question_id] = row.answer;
 
+  const nexusDuration = Math.max(1, parseInt(a.nexus_duration) || 3);
+
   const exposures = [];
 
   // ── 1. Sales & Use Tax — threshold-based ─────────────────────────────────
@@ -34,10 +36,8 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
     }
     const combinedAmount = combinedRow ? (parseNum(combinedRow.year_1) || 0) : 0;
 
-    // Individual above-threshold: × 3 years × 2%/6%
-    // Combined bucket: × 3 years × 50%/100% probability discount × 2%/6%
-    const totalLow  = aboveTotal * 3 * 0.02 + combinedAmount * 0.50 * 3 * 0.02;
-    const totalHigh = aboveTotal * 3 * 0.06 + combinedAmount * 1.00 * 3 * 0.06;
+    const totalLow  = aboveTotal * nexusDuration * 0.02 + combinedAmount * 0.50 * nexusDuration * 0.02;
+    const totalHigh = aboveTotal * nexusDuration * 0.06 + combinedAmount * 1.00 * nexusDuration * 0.06;
 
     if (totalLow > 0 || totalHigh > 0) {
       const descParts = [];
@@ -48,7 +48,7 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
         description: `Estimated unremitted sales tax based on reported sales in ${descParts.join(" and ")}`,
         lowEstimate: totalLow,
         highEstimate: totalHigh,
-        basis: "Applies 2%–6% blended effective rate to 3-year annual sales in threshold-crossing states. Combined-estimate bucket discounted at 50% (low) to 100% (high) for threshold uncertainty.",
+        basis: `Applies 2%–6% blended effective rate to annual sales in threshold-crossing states over a ${nexusDuration}-year exposure period per management's representation of sales history. Combined-estimate bucket discounted at 50% (low) to 100% (high) for threshold uncertainty.`,
       });
     }
   }
@@ -101,7 +101,7 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
         description: "Estimated payroll tax exposure if independent contractors are reclassified as employees",
         lowEstimate: comp * 0.153 * 0.25,
         highEstimate: comp * 0.153 * 0.50,
-        basis: "Reported individual contractor compensation × 15.3% employment taxes × 25%–50% audit adjustment factor, representing partial reclassification. Assumes the reported year is representative; assessments typically cover a 3-year lookback.",
+        basis: "Calculated on the most recent year's reported individual contractor compensation × 15.3% employment taxes × 25%–50% audit adjustment factor. Assessments typically cover a 3-year lookback; cumulative exposure may be proportionally higher where the arrangement is longstanding.",
       });
     } else if (count !== null && count > 0) {
       exposures.push({
@@ -142,9 +142,9 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
         yearsUsed++;
       };
 
-      applyYear(y1GR, y1TI);
-      applyYear(y2GR, y2TI);
-      applyYear(y3GR, y3TI);
+      if (nexusDuration >= 1) applyYear(y1GR, y1TI);
+      if (nexusDuration >= 2) applyYear(y2GR, y2TI);
+      if (nexusDuration >= 3) applyYear(y3GR, y3TI);
 
       if (yearsUsed > 0 && totalAttrIncome > 0) {
         const basisSuffix = pl272Factor < 1
@@ -155,7 +155,7 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
           description: "Estimated state income tax exposure in states where the company has nexus but has not filed returns",
           lowEstimate: totalAttrIncome * 0.05 * pl272Factor,
           highEstimate: totalAttrIncome * 0.09 * pl272Factor,
-          basis: "Apportions reported taxable income to non-filing states using a sales factor (reported state sales over total gross receipts) and applies a blended state rate of 5% to 9%." + basisSuffix,
+          basis: `Apportions reported taxable income to non-filing states using a sales factor (reported state sales over total gross receipts) across ${yearsUsed} year${yearsUsed !== 1 ? "s" : ""} of reported data per management's representation of sales history, and applies a blended state rate of 5% to 9%.` + basisSuffix,
         });
       }
     } else if (totalItSales > 0) {
@@ -166,9 +166,9 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
       exposures.push({
         category: "State Income Tax",
         description: "Estimated state income tax exposure in states where the company has nexus but has not filed returns",
-        lowEstimate: assumedIncome * 0.05 * pl272Factor,
-        highEstimate: assumedIncome * 0.09 * pl272Factor,
-        basis: "Apportions taxable income to non-filing states using a sales factor and applies a blended state rate of 5% to 9%." + basisSuffix,
+        lowEstimate: assumedIncome * 0.05 * pl272Factor * nexusDuration,
+        highEstimate: assumedIncome * 0.09 * pl272Factor * nexusDuration,
+        basis: `Apportions taxable income to non-filing states using a sales factor and applies a blended state rate of 5% to 9% over a ${nexusDuration}-year exposure period per management's representation of sales history.` + basisSuffix,
       });
     }
   }

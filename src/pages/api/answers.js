@@ -14,6 +14,7 @@ const VALID_QUESTION_IDS = new Set([
   "exemption_certs", "use_tax_review",
   "employment_tax_states", "contractor_usage", "contractor_classification",
   "property_tax", "unclaimed_property",
+  "nexus_duration",
   // financial input questions
   "most_recent_filed_year",
   "gross_receipts_y1", "gross_receipts_y2", "gross_receipts_y3",
@@ -36,6 +37,7 @@ const FREE_FORM_QUESTIONS = new Set([
   "officer_comp", "erc_amount", "contractor_count", "contractor_comp",
   "most_recent_filed_year",
   "revenue_type",
+  "nexus_duration",
 ]);
 
 export default async function handler(req, res) {

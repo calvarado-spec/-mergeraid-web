@@ -415,6 +415,7 @@ const TOOLTIPS = {
   contractor_classification: "The IRS and states use specific criteria to determine whether a worker is an employee or an independent contractor. Misclassification can result in significant payroll tax liability, penalties, and interest. Factors that generally indicate independent contractor status include: the worker sets their own schedule, works for multiple clients, is not economically dependent on the Company, uses their own tools and equipment, and is engaged for a specific project or defined scope of work. Workers who perform the same functions as employees on a full-time or ongoing basis present higher reclassification risk regardless of how they are classified.",
   property_tax: "Personal property tax returns (renditions) are required in many states and localities where a company owns or leases equipment, furniture, or other tangible personal property. Real property is generally assessed directly by the locality without a return filing. Failure to file required renditions can result in estimated assessments, penalties, and back taxes.",
   unclaimed_property: "Unclaimed property laws require companies to report and remit uncashed checks, unused customer credits, and other abandoned property to the state after a dormancy period, typically 3 to 5 years.",
+  nexus_duration: "This determines how many years of potential exposure are estimated. Economic nexus obligations begin when thresholds are first crossed, so a recently grown sales footprint has a shorter exposure period than a longstanding one.",
   taxable_income_y1: "Taxable income is the Company's income subject to federal tax as reported on its return (Form 1120, 1120-S, or 1065). This is used to estimate state income tax exposure through apportionment.",
   taxable_income_y2: "Taxable income is the Company's income subject to federal tax as reported on its return (Form 1120, 1120-S, or 1065). This is used to estimate state income tax exposure through apportionment.",
   taxable_income_y3: "Taxable income is the Company's income subject to federal tax as reported on its return (Form 1120, 1120-S, or 1065). This is used to estimate state income tax exposure through apportionment.",
@@ -447,6 +448,7 @@ function blankSnap(overrides) {
     equityView: "entity-select", equityQuestionId: null,
     equityQuestionNum: 1, equityTotal: null, equityEntityType: null,
     filedYear: null,
+    nexusDurationAnswered: false, pendingNextId: null, pendingNextNum: null,
     ...overrides,
   };
 }
@@ -457,6 +459,7 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
   let qNum = startQNum;
   // Inherit filedYear from equity phase if passed; pure-asset sets it on encounter
   let replayFiledYear = extraFields?.filedYear ?? null;
+  let nexusDurationDone = false;
 
   function snap(overrides) {
     return blankSnap({
@@ -465,6 +468,7 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
       equityInAssetPhase: inEquityAssetPhase, equityOffset,
       equityView: inEquityAssetPhase ? "question" : "entity-select",
       filedYear: replayFiledYear,
+      nexusDurationAnswered: nexusDurationDone,
       ...extraFields,
       ...overrides,
     });
@@ -496,6 +500,26 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
       const { next: nextId, nextNumber: nextNum } = outcome;
       const stateCtx = { questionId: qId, nextId, nextNumber: nextNum };
       if (nextId !== "done" && a[nextId] !== undefined) {
+        if (!nexusDurationDone) {
+          if (a.nexus_duration === undefined) {
+            return {
+              finalState: snap({
+                view: "nexus-duration",
+                nexusDurationAnswered: false,
+                pendingNextId: nextId,
+                pendingNextNum: nextNum,
+              }),
+              history,
+            };
+          }
+          history.push(snap({
+            view: "nexus-duration",
+            nexusDurationAnswered: false,
+            pendingNextId: nextId,
+            pendingNextNum: nextNum,
+          }));
+          nexusDurationDone = true;
+        }
         qId = nextId;
         qNum = nextNum;
         continue;
@@ -648,6 +672,9 @@ export default function Questionnaire() {
     setEquityTotal(s.equityTotal);
     setEquityEntityType(s.equityEntityType);
     setFiledYear(s.filedYear ?? null);
+    setNexusDurationAnswered(s.nexusDurationAnswered ?? false);
+    setPendingNextId(s.pendingNextId ?? null);
+    setPendingNextNum(s.pendingNextNum ?? null);
   }
 
   function captureSnapshot() {
@@ -656,7 +683,7 @@ export default function Questionnaire() {
       selectedStates, stateSalesData, combinedEstimate,
       equityInAssetPhase, equityOffset,
       equityView, equityQuestionId, equityQuestionNum, equityTotal, equityEntityType,
-      filedYear,
+      filedYear, nexusDurationAnswered, pendingNextId, pendingNextNum,
     };
   }
 
@@ -700,6 +727,11 @@ export default function Questionnaire() {
 
   // ── Filed year (for dynamic GR/TI labels) ────────────────────────────────
   const [filedYear, setFiledYear] = useState(null);
+
+  // ── Nexus duration (asked once after first state-sales entry) ────────────
+  const [nexusDurationAnswered, setNexusDurationAnswered] = useState(false);
+  const [pendingNextId, setPendingNextId] = useState(null);
+  const [pendingNextNum, setPendingNextNum] = useState(null);
 
   // ── Equity flow state ────────────────────────────────────────────────────
   const [equityView, setEquityView] = useState("entity-select");
@@ -903,8 +935,39 @@ export default function Questionnaire() {
       }
       setHistoryStack((h) => [...h, snap]);
       const { nextId, nextNumber } = stateSelectContext;
-      if (nextId === "done") setView("done");
-      else { setQuestionId(nextId); setQuestionNumber(equityOffset + nextNumber); setView("question"); }
+      if (!nexusDurationAnswered) {
+        setPendingNextId(nextId);
+        setPendingNextNum(nextNumber);
+        setView("nexus-duration");
+      } else if (nextId === "done") {
+        setView("done");
+      } else {
+        setQuestionId(nextId);
+        setQuestionNumber(equityOffset + nextNumber);
+        setView("question");
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleNexusDurationAnswer(val) {
+    if (!dealId) return;
+    setError(""); setSubmitting(true);
+    const snap = captureSnapshot();
+    try {
+      await postAnswer("nexus_duration", val);
+      setHistoryStack((h) => [...h, snap]);
+      setNexusDurationAnswered(true);
+      if (!pendingNextId || pendingNextId === "done") {
+        setView("done");
+      } else {
+        setQuestionId(pendingNextId);
+        setQuestionNumber(equityOffset + (pendingNextNum ?? 0));
+        setView("question");
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1283,6 +1346,38 @@ export default function Questionnaire() {
                 >
                   {submitting ? "Saving…" : "Save & Continue →"}
                 </button>
+              </div>
+            )}
+
+            {/* ── Nexus duration (asked once after first state-sales entry) ── */}
+            {view === "nexus-duration" && (
+              <div className="bg-white border border-blue-100 rounded-2xl shadow-md p-4 sm:p-8">
+                {historyStack.length > 0 && (
+                  <button onClick={handleBack} disabled={submitting} className="text-sm text-gray-400 hover:text-gray-600 mb-5 inline-flex items-center gap-1 transition-colors disabled:opacity-40">
+                    ← Back
+                  </button>
+                )}
+                <p className="text-gray-800 text-base font-medium leading-relaxed mb-2">
+                  Approximately how long has the Company been making sales at or near this level into the selected states?
+                  <TooltipIcon text={TOOLTIPS.nexus_duration} />
+                </p>
+                {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2 mb-4">{error}</p>}
+                <div className="flex flex-col gap-3 mt-6">
+                  {[
+                    { value: "1", label: "Less than 1 year" },
+                    { value: "2", label: "1–2 years" },
+                    { value: "3", label: "3 or more years" },
+                  ].map(({ value, label }) => (
+                    <button
+                      key={value}
+                      onClick={() => handleNexusDurationAnswer(value)}
+                      disabled={submitting || !dealId}
+                      className="w-full border-2 border-blue-200 hover:border-blue-600 hover:bg-blue-50 text-blue-700 font-medium py-3 rounded-lg transition-colors text-left px-4 disabled:opacity-50"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </>

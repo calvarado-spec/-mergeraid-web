@@ -294,6 +294,10 @@ const STYLES = `
   .exposure-td-right { padding: 8px 12px; border-bottom: 1px solid #e4e4e4; text-align: right; color: #333; white-space: nowrap; }
   .exposure-total { font-weight: bold; color: #1e3a5f; background: #eef2f7; }
   .exposure-disclaimer { font-size: 7.5pt; color: #999; line-height: 1.55; font-style: italic; border-top: 1px solid #e4e4e4; padding-top: 10px; margin-top: 4px; }
+  .exposure-footnotes { margin-top: 14px; border-top: 1px solid #e4e4e4; padding-top: 10px; }
+  .exposure-footnotes-heading { font-size: 7.5pt; font-weight: bold; color: #555; margin-bottom: 6px; }
+  .exposure-footnote { font-size: 7pt; color: #777; line-height: 1.55; margin-bottom: 5px; }
+  .footnote-num { font-weight: bold; color: #555; }
 
   /* ── Detailed findings ──────────────────────────────────── */
   .section-block {
@@ -699,6 +703,16 @@ export default function ReportPage() {
                 penalties, or interest. Consult a qualified tax advisor before making any decisions
                 based on these figures.
               </p>
+              {exposures.length > 0 && (
+                <div className="exposure-footnotes">
+                  <p className="exposure-footnotes-heading">Methodology Notes</p>
+                  {exposures.map((e, i) => (
+                    <p key={i} className="exposure-footnote">
+                      <span className="footnote-num">{i + 1}.</span>{" "}{e.basis}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })()}
