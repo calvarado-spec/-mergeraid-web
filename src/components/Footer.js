@@ -1,15 +1,11 @@
 import Link from 'next/link';
-import Image from 'next/image';
 
 export default function Footer() {
   return (
     <footer className="bg-white py-10 px-6 border-t">
       <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8 text-sm text-gray-600">
         <div>
-          <div className="flex items-center space-x-2 mb-2">
-            <Image src="/images/mergeraid-logo.png" alt="MergerAid Logo" width={24} height={24} />
-            <h4 className="font-semibold text-blue-700">MergerAid</h4>
-          </div>
+          <h4 className="font-semibold text-blue-700 mb-2">MergerAid</h4>
           <p>Tax risk screening for modern dealmakers.</p>
         </div>
         <div>
