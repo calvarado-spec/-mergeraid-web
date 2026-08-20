@@ -1,7 +1,6 @@
 /**
- * State-level tax rates for screening purposes.
- * Sales tax: Tax Foundation 2024 combined state + local average rates (as decimals).
- * Corporate income tax: top marginal rates, 2024.
+ * State-level sales tax rates for screening purposes.
+ * Tax Foundation 2024 combined state + local average rates (as decimals).
  * These are approximations for due diligence screening — not for filing or advice.
  */
 
@@ -57,58 +56,4 @@ export const salesTaxCombinedRate = {
   "West Virginia":        0.0640,
   Wisconsin:              0.0543,
   Wyoming:                0.0522,
-};
-
-export const corpIncomeTaxRate = {
-  Alabama:                0.0650,
-  Alaska:                 0.0940,
-  Arizona:                0.0490,
-  Arkansas:               0.0480,
-  California:             0.0884,
-  Colorado:               0.0440,
-  Connecticut:            0.0750,
-  Delaware:               0.0870,
-  "District of Columbia": 0.0825,
-  Florida:                0.0550,
-  Georgia:                0.0575,
-  Hawaii:                 0.0960,
-  Idaho:                  0.0580,
-  Illinois:               0.0950,  // 7.99% + 2.5% PPRT surcharge
-  Indiana:                0.0490,
-  Iowa:                   0.0550,  // flat rate
-  Kansas:                 0.0700,  // 4% + 3% surtax over $50K
-  Kentucky:               0.0500,
-  Louisiana:              0.0750,
-  Maine:                  0.0893,
-  Maryland:               0.0825,
-  Massachusetts:          0.0800,
-  Michigan:               0.0600,
-  Minnesota:              0.0980,
-  Mississippi:            0.0400,
-  Missouri:               0.0400,
-  Montana:                0.0675,
-  Nebraska:               0.0558,
-  Nevada:                 0,       // Commerce Tax is gross-receipts-based; no net income tax
-  "New Hampshire":        0.0750,  // Business Profits Tax
-  "New Jersey":           0.0900,
-  "New Mexico":           0.0590,
-  "New York":             0.0650,
-  "North Carolina":       0.0250,
-  "North Dakota":         0.0431,
-  Ohio:                   0.0026,  // CAT — gross-receipts-based, not net income
-  Oklahoma:               0.0400,
-  Oregon:                 0.0760,
-  Pennsylvania:           0.0899,
-  "Rhode Island":         0.0700,
-  "South Carolina":       0.0500,
-  "South Dakota":         0,       // no corporate income tax
-  Tennessee:              0.0650,
-  Texas:                  0.0075,  // margin tax on gross receipts, not net income
-  Utah:                   0.0465,
-  Vermont:                0.0850,
-  Virginia:               0.0600,
-  Washington:             0,       // B&O tax is gross-receipts-based; no net income tax
-  "West Virginia":        0.0650,
-  Wisconsin:              0.0790,
-  Wyoming:                0,       // no corporate income tax
 };

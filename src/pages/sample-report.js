@@ -1,6 +1,6 @@
 import Head from "next/head";
 import { calculateExposures } from "../lib/exposureEngine";
-import { salesTaxCombinedRate, corpIncomeTaxRate } from "../lib/stateRates";
+import { salesTaxCombinedRate } from "../lib/stateRates";
 import { getThreshold, NO_SALES_TAX_STATES } from "../lib/nexusThresholds";
 import {
   SAMPLE_DEAL,
@@ -806,8 +806,10 @@ export default function SampleReportPage() {
               The following state-level information was provided through the screening questionnaire. Sales
               figures represent estimated annual sales for the most recent completed year and, per
               management&apos;s representation, are treated as representative of a {nexusDurationLabel}-year
-              period for exposure estimation. Rates shown are the screening rates applied in the Estimated
-              Tax Exposure Summary.
+              period for exposure estimation. State income tax exposure is estimated using a blended
+              corporate income tax rate of 5% to 9% applied to apportioned income; no per-state rate is
+              shown. Combined sales and use tax rates shown are Tax Foundation 2024 combined state and
+              local averages.
             </p>
 
             {incomeTaxSampleRows.length > 0 && (
@@ -816,27 +818,17 @@ export default function SampleReportPage() {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th className="th" style={{ width: "33%" }}>State</th>
+                      <th className="th" style={{ width: "55%" }}>State</th>
                       <th className="th">Estimated Annual Sales</th>
-                      <th className="th">Corp. Rate Applied</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {incomeTaxSampleRows.map((row, i) => {
-                      const isCombined = row.state === "Other (combined)";
-                      const rate = isCombined
-                        ? "6.5% (national avg.)"
-                        : corpIncomeTaxRate[row.state] != null
-                        ? (corpIncomeTaxRate[row.state] * 100).toFixed(2) + "%"
-                        : "—";
-                      return (
-                        <tr key={i}>
-                          <td className="td">{row.state}</td>
-                          <td className="td">{fmtCurrency(row.year_1)}</td>
-                          <td className="td">{rate}</td>
-                        </tr>
-                      );
-                    })}
+                    {incomeTaxSampleRows.map((row, i) => (
+                      <tr key={i}>
+                        <td className="td">{row.state}</td>
+                        <td className="td">{fmtCurrency(row.year_1)}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </>

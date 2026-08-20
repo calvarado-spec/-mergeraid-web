@@ -1,8 +1,7 @@
 import { getThreshold, NO_SALES_TAX_STATES } from "./nexusThresholds.js";
-import { salesTaxCombinedRate, corpIncomeTaxRate } from "./stateRates.js";
+import { salesTaxCombinedRate } from "./stateRates.js";
 
-const NATIONAL_AVG_SALES_TAX  = 0.07;
-const NATIONAL_AVG_CORP_RATE  = 0.065;
+const NATIONAL_AVG_SALES_TAX = 0.07;
 
 function parseNum(val) {
   if (val == null || val === "") return null;
@@ -43,8 +42,8 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
     const lowCombined  = combinedAmount * NATIONAL_AVG_SALES_TAX * nexusDuration * 0.50;
     const highCombined = combinedAmount * NATIONAL_AVG_SALES_TAX * nexusDuration * 1.00;
 
-    const totalLow  = baseTax + lowCombined;
-    const totalHigh = (baseTax + highCombined) * 1.5;
+    const totalLow  = baseTax * 0.9 + lowCombined;
+    const totalHigh = baseTax * 1.1 + highCombined;
 
     if (totalLow > 0 || totalHigh > 0) {
       const descParts = [];
@@ -55,7 +54,7 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
         description: `Estimated unremitted sales tax based on reported sales in ${descParts.join(" and ")}`,
         lowEstimate: totalLow,
         highEstimate: totalHigh,
-        basis: `Applies each state's combined average sales and use tax rate to reported annual sales in threshold-crossing states over a ${nexusDuration}-year period per management's representation. High estimate includes an allowance of approximately 50% for penalties and interest. Assumes reported sales are taxable sales. Combined-estimate bucket uses the national average combined rate (~7%) weighted at 50% (low) to 100% (high) for threshold uncertainty.`,
+        basis: `Applies each state's combined average state and local sales tax rate (per published Tax Foundation averages) to reported annual sales in threshold-crossing states over a ${nexusDuration}-year period per management's representation. Estimates reflect tax only and exclude penalties and interest, which may be substantial — failure-to-file penalties alone commonly reach 25% of tax due, plus interest. Assumes reported sales are taxable sales. The ±10% low/high band reflects local rate variation and rate movement. Combined-estimate bucket uses the national average combined rate (~7%) weighted at 50% (low) to 100% (high) for threshold uncertainty.`,
       });
     }
   }
@@ -72,7 +71,7 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
         description: "Potential IRS recapture of Employee Retention Credits claimed",
         lowEstimate: erc * 0.10,
         highEstimate: erc * 0.30,
-        basis: "Assumes partial disallowance of 10% to 30% of total credits claimed. Full disallowance is possible where eligibility is not supportable.",
+        basis: "Assumes partial disallowance of 10% to 30% of total credits claimed. Full disallowance is possible where eligibility is not supportable. Excludes penalties and interest.",
       });
     }
   }
@@ -108,7 +107,7 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
         description: "Estimated payroll tax exposure if independent contractors are reclassified as employees",
         lowEstimate: comp * 0.153 * 0.25,
         highEstimate: comp * 0.153 * 0.50,
-        basis: "Calculated on the most recent year's reported individual contractor compensation × 15.3% employment taxes × 25%–50% audit adjustment factor. Assessments typically cover a 3-year lookback; cumulative exposure may be proportionally higher where the arrangement is longstanding.",
+        basis: "Calculated on the most recent year's reported individual contractor compensation × 15.3% employment taxes × 25%–50% audit adjustment factor. Assessments typically cover a 3-year lookback; cumulative exposure may be proportionally higher where the arrangement is longstanding. Excludes penalties and interest.",
       });
     } else if (count !== null && count > 0) {
       exposures.push({
@@ -116,7 +115,7 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
         description: "Estimated payroll tax exposure if independent contractors are reclassified as employees",
         lowEstimate: count * 45000 * 0.153 * 0.25,
         highEstimate: count * 85000 * 0.153 * 0.50,
-        basis: `${Math.round(count)} contractors × avg comp × 15.3% FICA × 25%–50% audit adjustment factor`,
+        basis: `${Math.round(count)} contractors × avg comp × 15.3% FICA × 25%–50% audit adjustment factor. Excludes penalties and interest.`,
       });
     }
   }
@@ -137,9 +136,9 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
     // P.L. 86-272 protects tangible goods sellers from state income tax when sole activity is solicitation
     const pl272Factor = a.revenue_type === "goods" ? 0.5 : 1;
 
-    const basisSuffix = pl272Factor < 1
-      ? " Estimate reduced by 50% to reflect potential P.L. 86-272 protection for tangible goods sellers. Gross receipts-based taxes (OH CAT, TX margin, WA B&O) are approximated or excluded as noted."
-      : " Gross receipts-based taxes (OH CAT, TX margin, WA B&O) are approximated or excluded as noted.";
+    const pl272Suffix = pl272Factor < 1
+      ? " Estimate reduced by 50% to reflect potential P.L. 86-272 protection for tangible goods sellers."
+      : "";
 
     if (hasTaxableIncome) {
       let totalAttrIncome = 0;
@@ -157,58 +156,24 @@ export function calculateExposures(answers, stateSales, incomeTaxSales) {
       if (nexusDuration >= 3) applyYear(y3GR, y3TI);
 
       if (yearsUsed > 0 && totalAttrIncome > 0) {
-        // Allocate attributable income per state by relative sales share
-        let baseTax = 0;
-        const nonCombinedRows = itSales.filter((r) => r.state !== "Other (combined)");
-        const combinedItRow   = itSales.find((r)  => r.state === "Other (combined)");
-
-        for (const row of nonCombinedRows) {
-          const stateSales1 = parseNum(row.year_1) || 0;
-          const stateShare = totalItSales > 0 ? stateSales1 / totalItSales : 0;
-          const stateIncome = totalAttrIncome * stateShare;
-          const rate = corpIncomeTaxRate[row.state] ?? NATIONAL_AVG_CORP_RATE;
-          baseTax += stateIncome * rate * pl272Factor;
-        }
-        if (combinedItRow) {
-          const combinedShare = totalItSales > 0 ? (parseNum(combinedItRow.year_1) || 0) / totalItSales : 0;
-          baseTax += totalAttrIncome * combinedShare * NATIONAL_AVG_CORP_RATE * pl272Factor;
-        }
-
-        if (baseTax > 0) {
-          exposures.push({
-            category: "State Income Tax",
-            description: "Estimated state income tax exposure in states where the company has nexus but has not filed returns",
-            lowEstimate: baseTax,
-            highEstimate: baseTax * 1.5,
-            basis: `Apportions reported taxable income to non-filing states using a sales factor (reported state sales over total gross receipts) across ${yearsUsed} year${yearsUsed !== 1 ? "s" : ""} per management's representation, allocates among states by relative sales, and applies each state's corporate income tax rate. High estimate includes an allowance of approximately 50% for penalties and interest.` + basisSuffix,
-          });
-        }
-      }
-    } else if (totalItSales > 0) {
-      // Path B: assumed 7.5% margin
-      let baseTax = 0;
-      const nonCombinedRows = itSales.filter((r) => r.state !== "Other (combined)");
-      const combinedItRow   = itSales.find((r)  => r.state === "Other (combined)");
-
-      for (const row of nonCombinedRows) {
-        const stateSales1 = parseNum(row.year_1) || 0;
-        const rate = corpIncomeTaxRate[row.state] ?? NATIONAL_AVG_CORP_RATE;
-        baseTax += stateSales1 * 0.075 * nexusDuration * rate * pl272Factor;
-      }
-      if (combinedItRow) {
-        const combinedSales = parseNum(combinedItRow.year_1) || 0;
-        baseTax += combinedSales * 0.075 * nexusDuration * NATIONAL_AVG_CORP_RATE * pl272Factor;
-      }
-
-      if (baseTax > 0) {
+        const attrWithFactor = totalAttrIncome * pl272Factor;
         exposures.push({
           category: "State Income Tax",
           description: "Estimated state income tax exposure in states where the company has nexus but has not filed returns",
-          lowEstimate: baseTax,
-          highEstimate: baseTax * 1.5,
-          basis: `Apportions taxable income to non-filing states using a 7.5% assumed pre-tax margin applied to reported state sales, allocates among states by relative sales, and applies each state's corporate income tax rate over a ${nexusDuration}-year period per management's representation. High estimate includes an allowance of approximately 50% for penalties and interest. Taxable income was not provided; a 7.5% assumed pre-tax margin was applied to reported state sales.` + basisSuffix,
+          lowEstimate: attrWithFactor * 0.05,
+          highEstimate: attrWithFactor * 0.09,
+          basis: `Apportions reported taxable income to non-filing states using a sales factor (reported state sales over total gross receipts) across ${yearsUsed} year${yearsUsed !== 1 ? "s" : ""} per management's representation, and applies a blended state corporate income tax rate of 5% to 9%. Estimates reflect net income-based taxes only and exclude penalties and interest, which may be substantial. Gross receipts, franchise, and minimum taxes are excluded.` + pl272Suffix,
         });
       }
+    } else if (totalItSales > 0) {
+      const assumedIncome = totalItSales * 0.075 * nexusDuration * pl272Factor;
+      exposures.push({
+        category: "State Income Tax",
+        description: "Estimated state income tax exposure in states where the company has nexus but has not filed returns",
+        lowEstimate: assumedIncome * 0.05,
+        highEstimate: assumedIncome * 0.09,
+        basis: `Apportions taxable income to non-filing states using a sales factor and applies a blended state corporate income tax rate of 5% to 9% over a ${nexusDuration}-year exposure period per management's representation. Estimates reflect net income-based taxes only and exclude penalties and interest, which may be substantial. Gross receipts, franchise, and minimum taxes are excluded. Taxable income was not provided; a 7.5% assumed pre-tax margin was applied to reported state sales.` + pl272Suffix,
+      });
     }
   }
 
