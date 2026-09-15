@@ -14,7 +14,7 @@ function fmtCurrency(n) {
   return Number(n).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
-function computeRisks(answers, stateSalesRows, empStates = []) {
+function computeRisks(answers, stateSalesRows, empStates = [], physicalStates = [], pl86272States = []) {
   const a = {};
   for (const row of answers) a[row.question_id] = row.answer;
 
@@ -56,20 +56,28 @@ function computeRisks(answers, stateSalesRows, empStates = []) {
 
   // ── State Income Tax ─────────────────────────────────────────────────────
   if (a.income_tax_nexus === "yes") {
-    let pl272 = "";
-    if (a.revenue_type === "goods") {
-      pl272 = " Note that P.L. 86-272 may limit state income tax exposure in states where the Company's only in-state activity is the solicitation of orders for the sale of tangible goods, subject to state-specific limitations. Where P.L. 86-272 applies, states cannot impose net income tax on the Company's in-state sales.";
-    } else if (a.revenue_type === "services" || a.revenue_type === "both") {
-      pl272 = " P.L. 86-272 protections do not extend to service revenue. States where the Company sells services may assert income tax nexus on the full amount of sales attributable to that state.";
+    let itText = "Risk that the Company may have state income tax filing obligations in states where it has sales to customers but does not file returns. Applicability depends on whether the Company has exceeded economic nexus thresholds adopted by each state following South Dakota v. Wayfair.";
+    if (a.revenue_type === "goods" || a.revenue_type === "both") {
+      if (a.pl86272_beyond_solicitation === "no") {
+        itText += " Management represented that in-state activities are limited to solicitation of orders for tangible goods in all states; P.L. 86-272 protection may apply, limiting net income tax exposure.";
+      } else if (a.pl86272_beyond_solicitation === "yes" && pl86272States.length > 0) {
+        itText += ` Management identified activities beyond solicitation in the following states, which are not protected by P.L. 86-272: ${pl86272States.join(", ")}.`;
+      } else {
+        itText += " Note that P.L. 86-272 may limit income tax exposure in states where the Company's only in-state activity is the solicitation of orders for tangible goods, subject to state-specific limitations.";
+      }
+    } else if (a.revenue_type === "services") {
+      itText += " P.L. 86-272 protections do not extend to service revenue; income tax nexus exposure applies to all states where the Company has sales without a filing obligation.";
     }
-    add("State Income Tax", "State Income Tax Economic Nexus",
-      "Risk that the Company may have state income tax filing obligations in states where it has sales to customers but does not file returns. Applicability depends on whether the Company has exceeded economic nexus thresholds adopted by each state following South Dakota v. Wayfair." + pl272,
-      "moderate");
+    add("State Income Tax", "State Income Tax Economic Nexus", itText, "moderate");
   }
 
-  if (a.physical_nexus === "yes")
-    add("State Income Tax", "Physical Presence Nexus Risk",
-      "Risk that physical presence in states where the Company does not currently file may create state income tax filing obligations. For C corporations, exposure is estimated using a blended state rate applied to apportioned income. For pass-through entities, exposure is estimated using an apportionment formula at the owner level. Recommend reviewing employee locations, contractor locations, and property situs by state.", "moderate");
+  if (a.physical_nexus === "yes") {
+    let phText = "Risk that physical presence in states where the Company does not currently file may create state income tax filing obligations. For C corporations, exposure is estimated using a blended state rate applied to apportioned income. For pass-through entities, exposure is estimated using an apportionment formula at the owner level. Recommend reviewing employee locations, contractor locations, and property situs by state.";
+    if (physicalStates.length > 0) {
+      phText += ` Management identified the following states: ${physicalStates.join(", ")}.`;
+    }
+    add("State Income Tax", "Physical Presence Nexus Risk", phText, "moderate");
+  }
 
   // ── Sales & Use Tax ──────────────────────────────────────────────────────
   if (a.sales_tax_nexus === "yes") {
@@ -132,9 +140,16 @@ function computeRisks(answers, stateSalesRows, empStates = []) {
 
   if (a.entity_type === "scorp") {
     const rawComp = a.officer_comp != null ? parseFloat(String(a.officer_comp).replace(/[^0-9.-]/g, "")) : NaN;
-    if (!isNaN(rawComp) && rawComp < 250000)
-      add("Employment Tax", "Below-Market Officer Compensation",
-        "To the extent officer/shareholder W-2 compensation is below reasonable levels for the industry and role, the IRS may recharacterize a portion of distributions as wages subject to employment tax. Recommend benchmarking officer compensation against industry comparables to assess exposure.", "moderate");
+    if (!isNaN(rawComp) && rawComp < 250000) {
+      const rawDist = a.scorp_distributions != null ? parseFloat(String(a.scorp_distributions).replace(/[^0-9.-]/g, "")) : NaN;
+      if (!isNaN(rawDist) && rawDist === 0) {
+        add("Employment Tax", "Below-Market Officer Compensation",
+          "To the extent officer/shareholder W-2 compensation is below reasonable levels for the industry and role, the IRS may recharacterize a portion of distributions as wages subject to employment tax. No distributions were reported for the most recent year; recharacterization exposure is limited absent distributions.", "moderate");
+      } else {
+        add("Employment Tax", "Below-Market Officer Compensation",
+          "To the extent officer/shareholder W-2 compensation is below reasonable levels for the industry and role, the IRS may recharacterize a portion of distributions as wages subject to employment tax. Recommend benchmarking officer compensation against industry comparables to assess exposure.", "moderate");
+      }
+    }
   }
 
   // ── Property Tax ─────────────────────────────────────────────────────────
@@ -236,13 +251,13 @@ export default async function handler(req, res) {
     if (dealResult.rows.length === 0)
       return res.status(404).json({ error: "Deal not found" });
 
-    const empStates = salesResult.rows
-      .filter((r) => r.question_id === "employment_tax_states")
-      .map((r) => r.state);
+    const empStates      = salesResult.rows.filter(r => r.question_id === "employment_tax_states").map(r => r.state);
+    const physicalStates = salesResult.rows.filter(r => r.question_id === "physical_nexus").map(r => r.state);
+    const pl86272States  = salesResult.rows.filter(r => r.question_id === "pl86272_states").map(r => r.state);
 
     return res.status(200).json({
       deal: dealResult.rows[0],
-      risks: computeRisks(answersResult.rows, salesResult.rows, empStates),
+      risks: computeRisks(answersResult.rows, salesResult.rows, empStates, physicalStates, pl86272States),
       answers: answersResult.rows,
       stateSales: salesResult.rows,
       incomeTaxSales: incomeTaxSalesResult.rows,

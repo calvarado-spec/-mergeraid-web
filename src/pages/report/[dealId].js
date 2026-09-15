@@ -469,7 +469,8 @@ export default function ReportPage() {
   const incomeTaxSalesRows  = (stateSales || []).filter((r) => r.question_id === "income_tax_nexus");
   const salesTaxSalesRows   = (stateSales || []).filter((r) => r.question_id === "sales_tax_nexus");
   const employmentTaxRows   = (stateSales || []).filter((r) => r.question_id === "employment_tax_states");
-  const hasAppendix = incomeTaxSalesRows.length > 0 || salesTaxSalesRows.length > 0 || employmentTaxRows.length > 0;
+  const physicalTaxRows     = (stateSales || []).filter((r) => r.question_id === "physical_nexus");
+  const hasAppendix = incomeTaxSalesRows.length > 0 || salesTaxSalesRows.length > 0 || employmentTaxRows.length > 0 || physicalTaxRows.length > 0;
   const nexusDurRow = (answers || []).find((r) => r.question_id === "nexus_duration");
   const nexusDurationLabel = nexusDurRow ? (parseInt(nexusDurRow.answer) || 3) : 3;
 
@@ -780,7 +781,7 @@ export default function ReportPage() {
               management&apos;s representation, are treated as representative of a {nexusDurationLabel}-year
               period for exposure estimation. State income tax exposure is estimated using a blended
               corporate income tax rate of 5% to 9% applied to apportioned income; no per-state rate is
-              shown. Combined sales and use tax rates shown are Tax Foundation 2024 combined state and
+              shown. Combined sales and use tax rates shown are Tax Foundation 2026 combined state and
               local averages.
             </p>
 
@@ -875,6 +876,27 @@ export default function ReportPage() {
                   </thead>
                   <tbody>
                     {employmentTaxRows.map((row, i) => (
+                      <tr key={i}>
+                        <td className="td">{row.state}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {/* Physical Presence states table */}
+            {physicalTaxRows.length > 0 && (
+              <>
+                <h3 className="appendix-sub-heading">Physical Presence — States Identified</h3>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th className="th">State</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {physicalTaxRows.map((row, i) => (
                       <tr key={i}>
                         <td className="td">{row.state}</td>
                       </tr>

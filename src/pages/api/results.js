@@ -2,7 +2,7 @@ import { Pool } from "pg";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-function computeRisks(answers, empStates = []) {
+function computeRisks(answers, empStates = [], physicalStates = [], pl86272States = []) {
   const a = {};
   for (const row of answers) a[row.question_id] = row.answer;
 
@@ -45,22 +45,32 @@ function computeRisks(answers, empStates = []) {
   // ── State Income Tax ─────────────────────────────────────────────────────
   if (a.income_tax_nexus === "yes") {
     let itText = "Risk that the Company may have state income tax filing obligations in states where it has sales to customers but does not file returns. Applicability depends on whether the Company has exceeded economic nexus thresholds adopted by each state following South Dakota v. Wayfair.";
-    if (a.revenue_type === "goods") {
-      itText += " Note that P.L. 86-272 may limit income tax exposure in states where the Company's only in-state activity is the solicitation of orders for tangible goods, subject to state-specific limitations.";
-    } else if (a.revenue_type === "services" || a.revenue_type === "both") {
+    if (a.revenue_type === "goods" || a.revenue_type === "both") {
+      if (a.pl86272_beyond_solicitation === "no") {
+        itText += " Management represented that in-state activities are limited to solicitation of orders for tangible goods in all states; P.L. 86-272 protection may apply, limiting net income tax exposure.";
+      } else if (a.pl86272_beyond_solicitation === "yes" && pl86272States.length > 0) {
+        itText += ` Management identified activities beyond solicitation in the following states, which are not protected by P.L. 86-272: ${pl86272States.join(", ")}.`;
+      } else {
+        itText += " Note that P.L. 86-272 may limit income tax exposure in states where the Company's only in-state activity is the solicitation of orders for tangible goods, subject to state-specific limitations.";
+      }
+    } else if (a.revenue_type === "services") {
       itText += " P.L. 86-272 protections do not extend to service revenue; income tax nexus exposure applies to all states where the Company has sales without a filing obligation.";
     }
     add("State Income Tax", "State Income Tax Economic Nexus", itText, "moderate");
   }
 
-  if (a.physical_nexus === "yes")
-    add("State Income Tax", "Physical Presence Nexus Risk",
-      "Risk that physical presence in states where the Company does not currently file may create state income tax filing obligations. For C corporations, exposure is estimated using a blended state rate applied to apportioned income. For pass-through entities, exposure is estimated using an apportionment formula at the owner level. Recommend reviewing employee locations, contractor locations, and property situs by state.", "moderate");
+  if (a.physical_nexus === "yes") {
+    let phText = "Risk that physical presence in states where the Company does not currently file may create state income tax filing obligations. For C corporations, exposure is estimated using a blended state rate applied to apportioned income. For pass-through entities, exposure is estimated using an apportionment formula at the owner level. Recommend reviewing employee locations, contractor locations, and property situs by state.";
+    if (physicalStates.length > 0) {
+      phText += ` Management identified the following states: ${physicalStates.join(", ")}.`;
+    }
+    add("State Income Tax", "Physical Presence Nexus Risk", phText, "moderate");
+  }
 
   // ── Sales & Use Tax ──────────────────────────────────────────────────────
   if (a.sales_tax_nexus === "yes")
     add("Sales & Use Tax", "Sales Tax Economic Nexus",
-      "Risk that the Company may have sales and use tax collection and remittance obligations in states where it has sales to customers. Applicability depends on whether the Company has crossed economic nexus thresholds, which vary by state but are most commonly $100,000 in annual sales. California, Texas, and New York impose a $500,000 threshold. Alaska, Delaware, Montana, New Hampshire, and Oregon do not impose a general state sales tax. Review sales by state to confirm threshold status and identify states where nexus is established.", "moderate");
+      "Risk that the Company may have sales and use tax collection and remittance obligations in states where it has sales to customers. Applicability depends on whether the Company has crossed economic nexus thresholds, which vary by state but are most commonly $100,000 in annual sales. Alabama and Mississippi impose a $250,000 threshold. California, Texas, and New York impose a $500,000 threshold. Alaska, Delaware, Montana, New Hampshire, and Oregon do not impose a general state sales tax. Review sales by state to confirm threshold status and identify states where nexus is established.", "moderate");
 
   if (a.exemption_certs === "no")
     add("Sales & Use Tax", "Missing Exemption Certificates",
@@ -85,9 +95,16 @@ function computeRisks(answers, empStates = []) {
 
   if (a.entity_type === "scorp") {
     const rawComp = a.officer_comp != null ? parseFloat(String(a.officer_comp).replace(/[^0-9.-]/g, "")) : NaN;
-    if (!isNaN(rawComp) && rawComp < 250000)
-      add("Employment Tax", "Below-Market Officer Compensation",
-        "To the extent officer/shareholder W-2 compensation is below reasonable levels for the industry and role, the IRS may recharacterize a portion of distributions as wages subject to employment tax. Recommend benchmarking officer compensation against industry comparables to assess exposure.", "moderate");
+    if (!isNaN(rawComp) && rawComp < 250000) {
+      const rawDist = a.scorp_distributions != null ? parseFloat(String(a.scorp_distributions).replace(/[^0-9.-]/g, "")) : NaN;
+      if (!isNaN(rawDist) && rawDist === 0) {
+        add("Employment Tax", "Below-Market Officer Compensation",
+          "To the extent officer/shareholder W-2 compensation is below reasonable levels for the industry and role, the IRS may recharacterize a portion of distributions as wages subject to employment tax. No distributions were reported for the most recent year; recharacterization exposure is limited absent distributions.", "moderate");
+      } else {
+        add("Employment Tax", "Below-Market Officer Compensation",
+          "To the extent officer/shareholder W-2 compensation is below reasonable levels for the industry and role, the IRS may recharacterize a portion of distributions as wages subject to employment tax. Recommend benchmarking officer compensation against industry comparables to assess exposure.", "moderate");
+      }
+    }
   }
 
   // ── Property Tax ─────────────────────────────────────────────────────────
@@ -172,7 +189,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [dealResult, answersResult, empSalesResult] = await Promise.all([
+    const [dealResult, answersResult, stateSalesResult] = await Promise.all([
       pool.query(
         "SELECT id, client_name, target_name, deal_type FROM deals WHERE id = $1",
         [dealId]
@@ -182,7 +199,7 @@ export default async function handler(req, res) {
         [dealId]
       ),
       pool.query(
-        "SELECT state FROM state_sales WHERE deal_id = $1 AND question_id = 'employment_tax_states' ORDER BY state ASC",
+        "SELECT question_id, state FROM state_sales WHERE deal_id = $1 AND question_id IN ('employment_tax_states', 'physical_nexus', 'pl86272_states') ORDER BY state ASC",
         [dealId]
       ),
     ]);
@@ -192,8 +209,10 @@ export default async function handler(req, res) {
     }
 
     const deal = dealResult.rows[0];
-    const empStates = empSalesResult.rows.map((r) => r.state);
-    const risks = computeRisks(answersResult.rows, empStates);
+    const empStates      = stateSalesResult.rows.filter(r => r.question_id === "employment_tax_states").map(r => r.state);
+    const physicalStates = stateSalesResult.rows.filter(r => r.question_id === "physical_nexus").map(r => r.state);
+    const pl86272States  = stateSalesResult.rows.filter(r => r.question_id === "pl86272_states").map(r => r.state);
+    const risks = computeRisks(answersResult.rows, empStates, physicalStates, pl86272States);
 
     return res.status(200).json({ deal, risks });
   } catch (err) {

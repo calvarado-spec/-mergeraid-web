@@ -74,9 +74,16 @@ const QUESTIONS = {
     number: 4,
     text: "Has the examination been resolved?",
     outcomes: {
-      yes: { next: "related_party", nextNumber: 5 },
-      no:  { risk: true, next: "related_party", nextNumber: 5 },
+      yes: { next: "related_party",    nextNumber: 5 },
+      no:  { risk: true, next: "tax_exam_amount", nextNumber: 5 },
     },
+  },
+  tax_exam_amount: {
+    number: 4, type: "numeric-input",
+    text: "Proposed or estimated adjustment under the open examination, if known",
+    placeholder: "e.g. 250000",
+    helperNote: "Enter 0 if unknown.",
+    next: "related_party", nextNumber: 5,
   },
   related_party: {
     number: 5,
@@ -103,16 +110,23 @@ const QUESTIONS = {
       { value: "both",     label: "Both goods and services" },
     ],
     outcomes: {
-      goods:    { next: "physical_nexus", nextNumber: 7 },
-      services: { next: "physical_nexus", nextNumber: 7 },
-      both:     { next: "physical_nexus", nextNumber: 7 },
+      goods:    { next: "physical_nexus",    nextNumber: 7 },
+      services: { next: "physical_nexus",    nextNumber: 7 },
+      both:     { next: "goods_revenue_pct", nextNumber: 7 },
     },
+  },
+  goods_revenue_pct: {
+    number: 7, type: "numeric-input",
+    text: "Approximately what percentage of the Company's revenue is from the sale of tangible goods?",
+    placeholder: "e.g. 60",
+    helperNote: "Used to estimate P.L. 86-272 protection when the Company also derives revenue from services. Enter a whole number between 0 and 100.",
+    next: "physical_nexus", nextNumber: 7,
   },
   physical_nexus: {
     number: 7,
     text: "Does the Company have any presence outside of states where they currently file? This includes employees, contractors, or property in those states.",
     outcomes: {
-      yes: { risk: true, next: "income_tax_nexus", nextNumber: 8 },
+      yes: { stateSelect: true, skipAmounts: true, next: "income_tax_nexus", nextNumber: 8 },
       no:  { next: "income_tax_nexus", nextNumber: 8 },
     },
   },
@@ -124,13 +138,28 @@ const QUESTIONS = {
       no:  { next: "taxable_sales", nextNumber: 9 },
     },
   },
+  pl86272_beyond_solicitation: {
+    number: 8,
+    text: "Has the Company engaged in any activities in the identified income tax nexus states beyond the mere solicitation of orders for tangible goods?",
+    outcomes: {
+      yes: { stateSelect: true, skipAmounts: true, next: "taxable_sales", nextNumber: 9 },
+      no:  { next: "taxable_sales", nextNumber: 9 },
+    },
+  },
   taxable_sales: {
     number: 9,
     text: "Does the Company make taxable sales of tangible goods or services for sales tax purposes?",
     outcomes: {
-      yes: { next: "sales_tax_nexus", nextNumber: 9 },
-      no:  { next: "use_tax_review",  nextNumber: 11 },
+      yes: { next: "taxable_sales_pct", nextNumber: 9 },
+      no:  { next: "use_tax_review",    nextNumber: 11 },
     },
+  },
+  taxable_sales_pct: {
+    number: 9, type: "numeric-input",
+    text: "Approximately what percentage of the Company's sales are taxable for sales tax purposes?",
+    placeholder: "e.g. 80",
+    helperNote: "Enter a whole number between 0 and 100. If all sales are taxable, enter 100. Leave blank to assume 100%.",
+    next: "sales_tax_nexus", nextNumber: 9,
   },
   sales_tax_nexus: {
     number: 9,
@@ -336,6 +365,13 @@ const EQUITY_QUESTIONS = {
   },
   eq_utp: {
     text: "Does the company have any uncertain tax positions reflected on the balance sheet?",
+    yesNext: "eq_utp_amount",
+    noNext: "most_recent_filed_year",
+  },
+  eq_utp_amount: {
+    text: "Total uncertain tax position reserve as shown on the balance sheet",
+    type: "numeric-input", placeholder: "e.g. 250000",
+    helperNote: "Enter 0 if unknown.",
     next: "most_recent_filed_year",
   },
   // ── Financial input questions (equity flow) ───────────────────────────────
@@ -381,12 +417,18 @@ const EQUITY_QUESTIONS = {
     text: "Total Combined Officer/Shareholder W-2 Compensation — All Shareholders (most recent year)",
     type: "numeric-input", placeholder: "e.g. 120000",
     helperNote: "Enter total W-2 wages paid to all officer-shareholders combined. Do not include distributions, dividends, or 1099 payments.",
+    next: "scorp_distributions",
+  },
+  scorp_distributions: {
+    text: "Total distributions paid to shareholders (most recent year)",
+    type: "numeric-input", placeholder: "e.g. 100000",
+    helperNote: "Enter 0 if no distributions were paid.",
   },
 };
 
 // Total questions per equity entity type (equity + asset phases combined, asset now 16)
 // Optional questions that extend these: scorp_big_assets (+1), ccorp_nol_amount (+1)
-const EQUITY_BASE_TOTALS = { scorp: 32, ccorp: 29, pship: 30 };
+const EQUITY_BASE_TOTALS = { scorp: 33, ccorp: 29, pship: 30 };
 const EQUITY_FIRST_QUESTION = {
   scorp: "scorp_single_class",
   ccorp: "ccorp_ownership_change",
@@ -407,7 +449,8 @@ const TOOLTIPS = {
   income_tax_nexus: "Economic nexus standards for income tax vary widely — several states apply a bright-line threshold (commonly $500,000 in annual sales), while others assert nexus at any level of purposeful, regular sales into the state. Most states adopted economic nexus standards following South Dakota v. Wayfair (2018).",
   physical_nexus: "Physical presence nexus is created when a company has employees, contractors, inventory, equipment, or other property in a state. This generally requires the company to file income tax returns in that state.",
   taxable_sales: "Taxable sales are sales of tangible personal property or certain services that are subject to sales tax. Not all sales are taxable — for example, sales for resale or certain exempt services may not be.",
-  sales_tax_nexus: "Sales tax economic nexus is triggered by exceeding a state's sales or transaction threshold — most commonly $100,000 in annual sales. California, Texas, and New York impose a $500,000 threshold. Five states have no general state sales tax: Alaska, Delaware, Montana, New Hampshire, and Oregon.",
+  sales_tax_nexus: "Sales tax economic nexus is triggered by exceeding a state's sales or transaction threshold — most commonly $100,000 in annual sales. Alabama and Mississippi impose a $250,000 threshold. California, Texas, and New York impose a $500,000 threshold. Five states have no general state sales tax: Alaska, Delaware, Montana, New Hampshire, and Oregon.",
+  pl86272_beyond_solicitation: "P.L. 86-272 protects a business from state net income tax if its only in-state activity is the solicitation of orders for tangible goods that are sent outside the state for approval and filled from inventory outside the state. Activities beyond solicitation — such as resolving customer complaints, collecting on past-due accounts, approving orders, returning products, or maintaining in-state inventory — may cause P.L. 86-272 protection to be lost for that state. Recent MTC guidance has also taken the position that certain internet-based activities, such as cookie placement and online chat, may constitute activities beyond solicitation.",
   exemption_certs: "Exemption certificates are documents provided by customers claiming they are exempt from sales tax — for example, resellers or exempt organizations. Without valid certificates on file, the seller may be liable for uncollected tax under audit.",
   use_tax_review: "Use tax applies when a company purchases goods or services without paying sales tax — for example, from an out-of-state vendor who did not charge tax. Companies are generally required to self-assess and remit use tax on these purchases.",
   employment_tax_states: "If employees live or work in states where the company does not file employment tax returns, the company may owe payroll taxes, unemployment insurance, and other withholding obligations in those states.",
@@ -447,7 +490,7 @@ function blankSnap(overrides) {
     equityInAssetPhase: false, equityOffset: 0,
     equityView: "entity-select", equityQuestionId: null,
     equityQuestionNum: 1, equityTotal: null, equityEntityType: null,
-    filedYear: null,
+    filedYear: null, revenueType: null,
     nexusDurationAnswered: false, pendingNextId: null, pendingNextNum: null,
     ...overrides,
   };
@@ -457,8 +500,8 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
   const history = [];
   let qId = "prior_reorg";
   let qNum = startQNum;
-  // Inherit filedYear from equity phase if passed; pure-asset sets it on encounter
   let replayFiledYear = extraFields?.filedYear ?? null;
+  const replayRevenueType = a.revenue_type ?? null;
   let nexusDurationDone = false;
 
   function snap(overrides) {
@@ -468,13 +511,14 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
       equityInAssetPhase: inEquityAssetPhase, equityOffset,
       equityView: inEquityAssetPhase ? "question" : "entity-select",
       filedYear: replayFiledYear,
+      revenueType: replayRevenueType,
       nexusDurationAnswered: nexusDurationDone,
       ...extraFields,
       ...overrides,
     });
   }
 
-  for (let guard = 0; guard < 60; guard++) {
+  for (let guard = 0; guard < 80; guard++) {
     const q = QUESTIONS[qId];
     if (!q) return { finalState: blankSnap({ view: "done" }), history };
     if (a[qId] === undefined) return { finalState: snap(), history };
@@ -497,9 +541,44 @@ function resumeAsset(a, inEquityAssetPhase, equityOffset, startQNum, extraFields
     if (!outcome) return { finalState: blankSnap({ view: "done" }), history };
 
     if (outcome.stateSelect) {
-      const { next: nextId, nextNumber: nextNum } = outcome;
+      let { next: nextId, nextNumber: nextNum } = outcome;
       const isNexusFlow = qId === "income_tax_nexus" || qId === "sales_tax_nexus";
-      const stateCtx = { questionId: qId, nextId, nextNumber: nextNum, skipAmounts: outcome.skipAmounts ?? false };
+      const needsPl86272 = qId === "income_tax_nexus" &&
+        (replayRevenueType === "goods" || replayRevenueType === "both");
+
+      if (needsPl86272) {
+        nextId = "pl86272_beyond_solicitation";
+        nextNum = 8;
+      }
+
+      const storageQId = qId === "pl86272_beyond_solicitation" ? "pl86272_states" : qId;
+      const stateCtx = { questionId: storageQId, nextId, nextNumber: nextNum, skipAmounts: outcome.skipAmounts ?? false };
+
+      if (needsPl86272) {
+        // Use nexus_duration as the "state-sales done" signal
+        if (a.nexus_duration !== undefined) {
+          if (!nexusDurationDone) {
+            history.push(snap({
+              view: "nexus-duration", nexusDurationAnswered: false,
+              pendingNextId: "pl86272_beyond_solicitation", pendingNextNum: 8,
+            }));
+            nexusDurationDone = true;
+          }
+          if (a.pl86272_beyond_solicitation !== undefined) {
+            qId = "pl86272_beyond_solicitation"; qNum = 8; continue;
+          }
+          return {
+            finalState: snap({
+              view: "question", questionId: "pl86272_beyond_solicitation",
+              questionNumber: equityOffset + 8, nexusDurationAnswered: true,
+            }),
+            history,
+          };
+        }
+        // nexus_duration not yet answered → show state-select
+        return { finalState: snap({ view: "state-select", stateSelectContext: stateCtx }), history };
+      }
+
       if (nextId !== "done" && a[nextId] !== undefined) {
         if (!nexusDurationDone && isNexusFlow) {
           if (a.nexus_duration === undefined) {
@@ -588,9 +667,10 @@ function resumeEquity(a) {
 
     if (equityQuestionId === "scorp_converted_from_c" && ans === "yes") equityTotal += 1;
     if (equityQuestionId === "ccorp_nol" && ans === "yes") equityTotal += 1;
+    if (equityQuestionId === "eq_utp" && ans === "yes") equityTotal += 1;
 
     const isLastFinancial =
-      equityQuestionId === "officer_comp" ||
+      equityQuestionId === "scorp_distributions" ||
       (equityQuestionId === "taxable_income_y3" && entityType !== "scorp");
 
     if (isLastFinancial) {
@@ -673,6 +753,7 @@ export default function Questionnaire() {
     setEquityTotal(s.equityTotal);
     setEquityEntityType(s.equityEntityType);
     setFiledYear(s.filedYear ?? null);
+    setRevenueType(s.revenueType ?? null);
     setNexusDurationAnswered(s.nexusDurationAnswered ?? false);
     setPendingNextId(s.pendingNextId ?? null);
     setPendingNextNum(s.pendingNextNum ?? null);
@@ -684,7 +765,7 @@ export default function Questionnaire() {
       selectedStates, stateSalesData, combinedEstimate,
       equityInAssetPhase, equityOffset,
       equityView, equityQuestionId, equityQuestionNum, equityTotal, equityEntityType,
-      filedYear, nexusDurationAnswered, pendingNextId, pendingNextNum,
+      filedYear, revenueType, nexusDurationAnswered, pendingNextId, pendingNextNum,
     };
   }
 
@@ -728,6 +809,12 @@ export default function Questionnaire() {
 
   // ── Filed year (for dynamic GR/TI labels) ────────────────────────────────
   const [filedYear, setFiledYear] = useState(null);
+
+  // ── Revenue type (drives pl86272 routing) ────────────────────────────────
+  const [revenueType, setRevenueType] = useState(null);
+
+  // ── pl86272_states limited to income_tax_nexus states ────────────────────
+  const [stateSelectLimitTo, setStateSelectLimitTo] = useState(null);
 
   // ── Nexus duration (asked once after first state-sales entry) ────────────
   const [nexusDurationAnswered, setNexusDurationAnswered] = useState(false);
@@ -811,9 +898,21 @@ export default function Questionnaire() {
     try {
       await postAnswer(questionId, answer);
       setHistoryStack((h) => [...h, snap]);
+
+      if (questionId === "revenue_type") setRevenueType(answer);
+
       const outcome = QUESTIONS[questionId].outcomes[answer];
       if (outcome.stateSelect) {
-        setStateSelectContext({ questionId, nextId: outcome.next, nextNumber: outcome.nextNumber, skipAmounts: outcome.skipAmounts ?? false });
+        let ctxNextId  = outcome.next;
+        let ctxNextNum = outcome.nextNumber;
+        // For income_tax_nexus with goods/both revenue, insert pl86272 step after nexus_duration
+        if (questionId === "income_tax_nexus" && (revenueType === "goods" || revenueType === "both")) {
+          ctxNextId  = "pl86272_beyond_solicitation";
+          ctxNextNum = 8;
+        }
+        // pl86272_beyond_solicitation yes → store as "pl86272_states" in state_sales
+        const storageQId = questionId === "pl86272_beyond_solicitation" ? "pl86272_states" : questionId;
+        setStateSelectContext({ questionId: storageQId, nextId: ctxNextId, nextNumber: ctxNextNum, skipAmounts: outcome.skipAmounts ?? false });
         setSelectedStates([]);
         setStateSalesData({});
         setCombinedEstimate("");
@@ -852,10 +951,25 @@ export default function Questionnaire() {
       }
     }
 
+    // Validate percentage fields 0–100
+    if (questionId === "taxable_sales_pct" || questionId === "goods_revenue_pct") {
+      const v = numericInputValue.trim();
+      if (v !== "") {
+        const n = parseFloat(v);
+        if (isNaN(n) || n < 0 || n > 100) {
+          setError("Please enter a percentage between 0 and 100.");
+          return;
+        }
+      }
+    }
+
     setSubmitting(true);
     const snap = captureSnapshot();
     try {
-      await postAnswer(questionId, numericInputValue.trim() || "0");
+      // taxable_sales_pct blank → default to 100
+      let valueToSave = numericInputValue.trim();
+      if (!valueToSave) valueToSave = questionId === "taxable_sales_pct" ? "100" : "0";
+      await postAnswer(questionId, valueToSave);
       setHistoryStack((h) => [...h, snap]);
 
       if (questionId === "most_recent_filed_year") {
@@ -1065,6 +1179,9 @@ export default function Questionnaire() {
       if (equityQuestionId === "ccorp_nol" && answer === "yes") {
         setEquityTotal((prev) => prev + 1);
       }
+      if (equityQuestionId === "eq_utp" && answer === "yes") {
+        setEquityTotal((prev) => prev + 1);
+      }
 
       const nextId = answer === "yes" ? (q.yesNext ?? q.next) : (q.noNext ?? q.next);
 
@@ -1114,7 +1231,7 @@ export default function Questionnaire() {
 
       setNumericInputValue("");
       const isLastFinancial =
-        equityQuestionId === "officer_comp" ||
+        equityQuestionId === "scorp_distributions" ||
         (equityQuestionId === "taxable_income_y3" && equityEntityType !== "scorp");
       if (isLastFinancial) {
         setEquityOffset(equityQuestionNum);
@@ -1168,7 +1285,23 @@ export default function Questionnaire() {
     ? "Select all states where the Company has sales to customers but does not file income tax returns:"
     : stateSelectContext?.questionId === "employment_tax_states"
     ? "Select the states where the Company has employees residing or working but does not file employment tax returns:"
+    : stateSelectContext?.questionId === "physical_nexus"
+    ? "Select all states where the Company has physical presence (employees, contractors, or property) but does not currently file income tax returns:"
+    : stateSelectContext?.questionId === "pl86272_states"
+    ? "Select the states where the Company has activities beyond the mere solicitation of orders for tangible goods:"
     : "Select all states where the Company has sales to customers but does not collect or remit sales and use tax:";
+
+  // Fetch income_tax_nexus states to limit pl86272_states selection
+  useEffect(() => {
+    if (view === "state-select" && stateSelectContext?.questionId === "pl86272_states" && dealId) {
+      fetch(`/api/state-sales?dealId=${encodeURIComponent(dealId)}&questionId=income_tax_nexus`)
+        .then(r => r.json())
+        .then(({ rows }) => setStateSelectLimitTo((rows || []).map(r => r.state)))
+        .catch(() => setStateSelectLimitTo(null));
+    } else {
+      setStateSelectLimitTo(null);
+    }
+  }, [view, stateSelectContext?.questionId, dealId]);
 
   const yesBtn = (onClick) => (
     <button
@@ -1312,14 +1445,14 @@ export default function Questionnaire() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => setSelectedStates([...US_STATES])}
+                    onClick={() => setSelectedStates([...(stateSelectLimitTo ?? US_STATES)])}
                     className="text-xs text-blue-600 hover:underline"
                   >
                     Select all states
                   </button>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-6 max-h-80 overflow-y-auto pr-1">
-                  {US_STATES.map((state) => {
+                  {(stateSelectLimitTo ?? US_STATES).map((state) => {
                     const checked = selectedStates.includes(state);
                     return (
                       <label

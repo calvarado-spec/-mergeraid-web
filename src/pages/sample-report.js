@@ -457,6 +457,7 @@ export default function SampleReportPage() {
   const incomeTaxSampleRows  = SAMPLE_STATE_SALES.filter((r) => r.question_id === "income_tax_nexus");
   const salesTaxSampleRows   = SAMPLE_STATE_SALES.filter((r) => r.question_id === "sales_tax_nexus");
   const employmentSampleRows = SAMPLE_STATE_SALES.filter((r) => r.question_id === "employment_tax_states");
+  const physicalSampleRows   = SAMPLE_STATE_SALES.filter((r) => r.question_id === "physical_nexus");
 
   return (
     <>
@@ -799,7 +800,7 @@ export default function SampleReportPage() {
         )}
 
         {/* APPENDIX A — STATE-LEVEL INFORMATION */}
-        {(incomeTaxSampleRows.length > 0 || salesTaxSampleRows.length > 0 || employmentSampleRows.length > 0) && (
+        {(incomeTaxSampleRows.length > 0 || salesTaxSampleRows.length > 0 || employmentSampleRows.length > 0 || physicalSampleRows.length > 0) && (
           <div className="report-section watermark-page">
             <h2 className="section-heading">Appendix A: State-Level Information</h2>
             <p className="body-para" style={{ marginBottom: "18px" }}>
@@ -808,7 +809,7 @@ export default function SampleReportPage() {
               management&apos;s representation, are treated as representative of a {nexusDurationLabel}-year
               period for exposure estimation. State income tax exposure is estimated using a blended
               corporate income tax rate of 5% to 9% applied to apportioned income; no per-state rate is
-              shown. Combined sales and use tax rates shown are Tax Foundation 2024 combined state and
+              shown. Combined sales and use tax rates shown are Tax Foundation 2026 combined state and
               local averages.
             </p>
 
@@ -890,6 +891,26 @@ export default function SampleReportPage() {
                   </thead>
                   <tbody>
                     {employmentSampleRows.map((row, i) => (
+                      <tr key={i}>
+                        <td className="td">{row.state}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {physicalSampleRows.length > 0 && (
+              <>
+                <p className="appendix-sub-heading">Physical Presence — States Identified</p>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th className="th">State</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {physicalSampleRows.map((row, i) => (
                       <tr key={i}>
                         <td className="td">{row.state}</td>
                       </tr>

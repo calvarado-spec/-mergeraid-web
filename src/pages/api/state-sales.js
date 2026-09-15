@@ -2,7 +2,13 @@ import { Pool } from "pg";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const VALID_QUESTION_IDS = new Set(["income_tax_nexus", "sales_tax_nexus", "employment_tax_states"]);
+const VALID_QUESTION_IDS = new Set([
+  "income_tax_nexus",
+  "sales_tax_nexus",
+  "employment_tax_states",
+  "physical_nexus",
+  "pl86272_states",
+]);
 
 export default async function handler(req, res) {
   if (req.method === "GET") {
